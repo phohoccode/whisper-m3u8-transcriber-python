@@ -98,17 +98,125 @@ def save_subtitles(result: dict, output_vtt: str = "subtitle.vtt") -> None:
         f.write(vtt_text)
     print(f"✅  Đã tạo xong: {output_vtt}")
 
+
+def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5) -> list:
+    """
+    Tách ảnh thumbnail từ video theo khoảng thời gian
+    
+    Args:
+        video_path: Đường dẫn đến file video
+        output_dir: Thư mục lưu thumbnails
+        interval: Khoảng thời gian giữa các thumbnail (giây)
+    
+    Returns:
+        List các đường dẫn thumbnail đã tạo
+    """
+    print(f"🖼️  Đang tạo thumbnails (mỗi {interval}s)...")
+    
+    # Tạo thư mục thumbnails
+    thumb_dir = os.path.join(output_dir, "thumbnails")
+    os.makedirs(thumb_dir, exist_ok=True)
+    
+    try:
+        # Lấy độ dài video
+        probe_cmd = [
+            "ffmpeg", "-i", video_path,
+            "-f", "null", "-"
+        ]
+        result = subprocess.run(probe_cmd, capture_output=True, text=True)
+        
+        # Parse duration từ stderr (ffmpeg ghi thông tin vào stderr)
+        duration = 0
+        output = result.stderr if result.stderr else ""
+        for line in output.split('\n'):
+            if "Duration:" in line:
+                time_str = line.split("Duration:")[1].split(",")[0].strip()
+                h, m, s = time_str.split(":")
+                duration = int(h) * 3600 + int(m) * 60 + float(s)
+                break
+        
+        if duration == 0:
+            print("⚠️  Không thể xác định độ dài video")
+            return []
+        
+        print(f"📊  Độ dài video: {int(duration)}s")
+        
+        # Tạo thumbnails
+        thumbnails = []
+        thumb_count = 0
+        
+        for timestamp in range(0, int(duration), interval):
+            thumb_count += 1
+            thumb_filename = f"thumb{thumb_count:04d}.jpg"
+            thumb_path = os.path.join(thumb_dir, thumb_filename)
+            
+            cmd = [
+                "ffmpeg", "-y",
+                "-ss", str(timestamp),
+                "-i", video_path,
+                "-vframes", "1",
+                "-q:v", "2",  # Chất lượng cao
+                thumb_path
+            ]
+            
+            subprocess.run(cmd, capture_output=True, check=True)
+            thumbnails.append({
+                "path": thumb_path,
+                "relative_path": f"thumbnails/{thumb_filename}",
+                "timestamp": timestamp
+            })
+        
+        print(f"✅  Đã tạo {len(thumbnails)} thumbnails")
+        return thumbnails
+        
+    except subprocess.CalledProcessError as e:
+        print(f"❌ LỖI: Không thể tạo thumbnails")
+        print(f"Chi tiết: {e}")
+        return []
+
+
+def create_thumbnail_vtt(thumbnails: list, output_vtt: str, interval: int = 5) -> None:
+    """
+    Tạo file VTT cho thumbnails
+    
+    Args:
+        thumbnails: List các thumbnail info
+        output_vtt: Đường dẫn file VTT đầu ra
+        interval: Khoảng thời gian giữa các thumbnail (giây)
+    """
+    print("💾  Đang tạo file VTT cho thumbnails...")
+    
+    lines = ["WEBVTT", ""]
+    
+    for i, thumb in enumerate(thumbnails):
+        start_time = thumb["timestamp"]
+        end_time = start_time + interval
+        
+        start_str = _format_timestamp(start_time)
+        end_str = _format_timestamp(end_time)
+        
+        lines.append(f"{start_str} --> {end_str}")
+        lines.append(thumb["relative_path"])
+        lines.append("")
+    
+    with open(output_vtt, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    
+    print(f"✅  Đã tạo file VTT thumbnails: {output_vtt}")
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Tải video từ m3u8, tách audio và nhận dạng giọng nói bằng Whisper")
     parser.add_argument("--m3u8", help="URL đến playlist m3u8 (nếu bỏ qua, bạn sẽ được nhắc)")
     parser.add_argument("-l", "--language", help="Mã ngôn ngữ để truyền cho Whisper (ví dụ: 'vi', 'en'). Nếu bỏ qua, bạn sẽ được nhắc.")
     parser.add_argument("-m", "--model", default="small", help="Mô hình Whisper để sử dụng (mặc định: small)")
     parser.add_argument("-o", "--output-prefix", default="movie", help="Tiền tố tên tệp đầu ra (mặc định: movie)")
-    parser.add_argument("-d", "--output-dir", help="Đường dẫn thư mục đầu ra (nếu bỏ qua, bạn sẽ được nhắc)")  # ← MỚI
-    parser.add_argument("-g", "--group-name", help="(Tùy chọn) Tên thư mục mới để nhóm 3 file (video/audio/vtt). Nếu bỏ qua, sẽ hỏi người dùng.")
+    parser.add_argument("-d", "--output-dir", help="Đường dẫn thư mục đầu ra (nếu bỏ qua, bạn sẽ được nhắc)")
+    parser.add_argument("-g", "--group-name", help="(Tùy chọn) Tên thư mục mới để nhóm các file. Nếu bỏ qua, sẽ hỏi người dùng.")
     parser.add_argument("--save-video", action="store_true", help="Lưu file video (mặc định: lưu tất cả nếu không chỉ định)")
     parser.add_argument("--save-audio", action="store_true", help="Lưu file audio (mặc định: lưu tất cả nếu không chỉ định)")
     parser.add_argument("--save-vtt", action="store_true", help="Lưu file VTT phụ đề (mặc định: lưu tất cả nếu không chỉ định)")
+    parser.add_argument("--create-thumbnails", action="store_true", help="Tạo thumbnails và VTT cho thumbnails")
+    parser.add_argument("--thumbnail-interval", type=int, default=5, help="Khoảng thời gian giữa các thumbnail (giây, mặc định: 5)")
     args = parser.parse_args()
 
     # Kiểm tra FFmpeg
@@ -241,7 +349,29 @@ def main() -> None:
             files_to_save.append("Audio")
         if save_vtt:
             files_to_save.append("VTT (Phụ đề)")
-        print(f"✅ Sẽ lưu: {', '.join(files_to_save)}")
+        
+        if files_to_save:
+            print(f"✅ Sẽ lưu: {', '.join(files_to_save)}")
+        else:
+            print("⚠️  Không có file nào được chọn để lưu!")
+            print("    (Video và Audio vẫn sẽ được tải về để xử lý, sau đó sẽ bị xóa)")
+
+
+    # --- Tùy chọn tạo thumbnails ---
+    create_thumbnails = args.create_thumbnails
+    thumbnail_interval = args.thumbnail_interval
+    
+    if not create_thumbnails:
+        create_thumb_choice = input("\n🖼️  Bạn có muốn tạo thumbnails từ video không? (y/N): ").strip().lower()
+        if create_thumb_choice == "y":
+            create_thumbnails = True
+            
+            # Hỏi khoảng thời gian
+            interval_input = input(f"⏱️  Nhập khoảng thời gian giữa các thumbnail (giây, mặc định {thumbnail_interval}): ").strip()
+            if interval_input.isdigit() and int(interval_input) > 0:
+                thumbnail_interval = int(interval_input)
+            
+            print(f"✅ Sẽ tạo thumbnails mỗi {thumbnail_interval}s")
 
     # Menu chọn ngôn ngữ (giữ nguyên như cũ)
     language = args.language
@@ -286,12 +416,16 @@ def main() -> None:
 
     print("\n" + "="*50)
     print("🚀 BẮT ĐẦU XỬ LÝ")
+    print("="*50)
+    print("ℹ️  Lưu ý: Video và Audio sẽ được tải về để xử lý")
+    print("    Các file không được chọn sẽ tự động xóa sau khi hoàn tất")
     print("="*50 + "\n")
 
     # Tạo đường dẫn file đầy đủ (ghi vào base_dir - có thể là thư mục nhóm mới)
     video_path = os.path.join(base_dir, "video.mp4")
     audio_path = os.path.join(base_dir, "audio.wav")
     vtt_path = os.path.join(base_dir, f"{args.output_prefix}_{language or 'auto'}.vtt")
+    thumbnail_vtt_path = os.path.join(base_dir, "thumbnails.vtt")
 
     # Xử lý
     video = download_from_m3u8(m3u8_link, video_path)
@@ -302,13 +436,25 @@ def main() -> None:
     if save_vtt:
         save_subtitles(result, vtt_path)
     
+    # Tạo thumbnails nếu được yêu cầu
+    thumbnails = []
+    if create_thumbnails:
+        thumbnails = extract_thumbnails(video_path, base_dir, thumbnail_interval)
+        if thumbnails:
+            create_thumbnail_vtt(thumbnails, thumbnail_vtt_path, thumbnail_interval)
+    
+    # Dọn dẹp các file không cần thiết
+    print("\n🧹 Đang dọn dẹp...")
+    
     # Xóa file video nếu người dùng không muốn lưu
     if not save_video and os.path.exists(video_path):
         os.remove(video_path)
+        print("   ❌ Đã xóa file video tạm")
     
     # Xóa file audio nếu người dùng không muốn lưu
     if not save_audio and os.path.exists(audio_path):
         os.remove(audio_path)
+        print("   ❌ Đã xóa file audio tạm")
     
     print(f"\n{'='*50}")
     print(f"✅ HOÀN TẤT!")
@@ -322,6 +468,8 @@ def main() -> None:
         files_saved.append(f"🎵 Audio: audio.wav")
     if save_vtt and os.path.exists(vtt_path):
         files_saved.append(f"📝 Phụ đề: {os.path.basename(vtt_path)}")
+    if thumbnails and os.path.exists(thumbnail_vtt_path):
+        files_saved.append(f"🖼️  Thumbnails: {len(thumbnails)} ảnh + thumbnails.vtt")
     
     for file_info in files_saved:
         print(file_info)
