@@ -99,19 +99,23 @@ def save_subtitles(result: dict, output_vtt: str = "subtitle.vtt") -> None:
     print(f"✅  Đã tạo xong: {output_vtt}")
 
 
-def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5) -> list:
+def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5, thumb_width: int = 160, thumb_height: int = 90, cols: int = 10, image_format: str = "webp") -> dict:
     """
-    Tách ảnh thumbnail từ video theo khoảng thời gian
+    Tạo sprite sheet từ video - tất cả thumbnails trong 1 ảnh duy nhất
     
     Args:
         video_path: Đường dẫn đến file video
-        output_dir: Thư mục lưu thumbnails
+        output_dir: Thư mục lưu sprite sheet
         interval: Khoảng thời gian giữa các thumbnail (giây)
+        thumb_width: Chiều rộng mỗi thumbnail
+        thumb_height: Chiều cao mỗi thumbnail
+        cols: Số cột trong sprite sheet
+        image_format: Định dạng ảnh ('webp' hoặc 'jpg')
     
     Returns:
-        List các đường dẫn thumbnail đã tạo
+        Dict chứa thông tin sprite sheet và timestamps
     """
-    print(f"🖼️  Đang tạo thumbnails (mỗi {interval}s)...")
+    print(f"🖼️  Đang tạo sprite sheet (mỗi {interval}s, định dạng: {image_format.upper()})...")
     
     # Tạo thư mục thumbnails
     thumb_dir = os.path.join(output_dir, "thumbnails")
@@ -125,7 +129,7 @@ def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5) -> l
         ]
         result = subprocess.run(probe_cmd, capture_output=True, text=True)
         
-        # Parse duration từ stderr (ffmpeg ghi thông tin vào stderr)
+        # Parse duration từ stderr
         duration = 0
         output = result.stderr if result.stderr else ""
         for line in output.split('\n'):
@@ -137,72 +141,189 @@ def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5) -> l
         
         if duration == 0:
             print("⚠️  Không thể xác định độ dài video")
-            return []
+            return {}
         
         print(f"📊  Độ dài video: {int(duration)}s")
         
-        # Tạo thumbnails
-        thumbnails = []
-        thumb_count = 0
+        # Tính số thumbnails cần tạo
+        timestamps = list(range(0, int(duration), interval))
+        thumb_count = len(timestamps)
         
-        for timestamp in range(0, int(duration), interval):
-            thumb_count += 1
-            thumb_filename = f"thumb{thumb_count:04d}.jpg"
-            thumb_path = os.path.join(thumb_dir, thumb_filename)
+        if thumb_count == 0:
+            print("⚠️  Không có thumbnail nào để tạo")
+            return {}
+        
+        print(f"📊  Số thumbnails: {thumb_count}")
+        
+        # Tạo các thumbnail riêng lẻ trước (tạm thời)
+        temp_thumbs = []
+        temp_dir = os.path.join(thumb_dir, "temp")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        for i, timestamp in enumerate(timestamps):
+            thumb_filename = f"thumb{i:04d}.jpg"
+            thumb_path = os.path.join(temp_dir, thumb_filename)
             
             cmd = [
                 "ffmpeg", "-y",
                 "-ss", str(timestamp),
                 "-i", video_path,
                 "-vframes", "1",
-                "-q:v", "2",  # Chất lượng cao
+                "-vf", f"scale={thumb_width}:{thumb_height}",
+                "-q:v", "2",
                 thumb_path
             ]
             
             subprocess.run(cmd, capture_output=True, check=True)
-            thumbnails.append({
-                "path": thumb_path,
-                "relative_path": f"thumbnails/{thumb_filename}",
-                "timestamp": timestamp
-            })
+            temp_thumbs.append(thumb_path)
         
-        print(f"✅  Đã tạo {len(thumbnails)} thumbnails")
-        return thumbnails
+        print(f"✅  Đã tạo {len(temp_thumbs)} thumbnails tạm")
+        
+        # Tạo sprite sheet từ các thumbnails
+        rows = (thumb_count + cols - 1) // cols  # Làm tròn lên
+        sprite_width = cols * thumb_width
+        sprite_height = rows * thumb_height
+        sprite_filename = f"sprite.{image_format}"
+        sprite_path = os.path.join(thumb_dir, sprite_filename)
+        
+        print(f"🎨  Đang ghép sprite sheet ({sprite_width}x{sprite_height})...")
+        
+        # Sử dụng FFmpeg để tạo sprite sheet
+        # Tạo filter complex để sắp xếp các ảnh vào grid
+        inputs = []
+        for thumb in temp_thumbs:
+            inputs.extend(["-i", thumb])
+        
+        # Tạo filter complex
+        filter_parts = []
+        for i in range(thumb_count):
+            filter_parts.append(f"[{i}:v]")
+        
+        # xstack filter để sắp xếp theo grid
+        xstack_inputs = "".join(filter_parts)
+        
+        # Tính layout cho xstack
+        layout = []
+        for i in range(thumb_count):
+            row = i // cols
+            col = i % cols
+            x = col * thumb_width
+            y = row * thumb_height
+            layout.append(f"{x}_{y}")
+        
+        layout_str = "|".join(layout)
+        
+        filter_complex = f"{xstack_inputs}xstack=inputs={thumb_count}:layout={layout_str}:fill=black[out]"
+        
+        # Tùy chọn encoding tùy theo định dạng
+        if image_format.lower() == "webp":
+            encoding_options = ["-quality", "90"]  # WebP quality (0-100)
+        else:
+            encoding_options = ["-q:v", "2"]  # JPEG quality (2-31, thấp hơn = tốt hơn)
+        
+        cmd = inputs + [
+            "-filter_complex", filter_complex,
+            "-map", "[out]",
+        ] + encoding_options + [sprite_path]
+        
+        subprocess.run(["ffmpeg", "-y"] + cmd, capture_output=True, check=True)
+        
+        print(f"✅  Đã tạo sprite sheet: {sprite_filename}")
+        
+        # Xóa các thumbnails tạm
+        print("🧹  Đang xóa thumbnails tạm...")
+        for thumb in temp_thumbs:
+            if os.path.exists(thumb):
+                os.remove(thumb)
+        
+        # Xóa thư mục temp
+        if os.path.exists(temp_dir):
+            os.rmdir(temp_dir)
+        
+        # Tạo thông tin sprite sheet
+        sprite_info = {
+            "sprite_path": sprite_path,
+            "sprite_filename": sprite_filename,
+            "relative_path": f"thumbnails/{sprite_filename}",
+            "timestamps": timestamps,
+            "thumb_width": thumb_width,
+            "thumb_height": thumb_height,
+            "cols": cols,
+            "rows": rows,
+            "total_thumbs": thumb_count
+        }
+        
+        print(f"✅  Sprite sheet: {cols} cột x {rows} hàng = {thumb_count} thumbnails")
+        
+        return sprite_info
         
     except subprocess.CalledProcessError as e:
-        print(f"❌ LỖI: Không thể tạo thumbnails")
+        print(f"❌ LỖI: Không thể tạo sprite sheet")
         print(f"Chi tiết: {e}")
-        return []
+        return {}
 
 
-def create_thumbnail_vtt(thumbnails: list, output_vtt: str, interval: int = 5) -> None:
+def create_thumbnail_vtt(sprite_info: dict, output_vtt: str, interval: int = 5, cdn_url: str = None) -> None:
     """
-    Tạo file VTT cho thumbnails
+    Tạo file VTT cho sprite sheet thumbnails
     
     Args:
-        thumbnails: List các thumbnail info
+        sprite_info: Dict chứa thông tin sprite sheet
         output_vtt: Đường dẫn file VTT đầu ra
         interval: Khoảng thời gian giữa các thumbnail (giây)
+        cdn_url: URL CDN cho sprite sheet (nếu có), ví dụ: https://cdn.example.com/thumbs/sprite.jpg
+                 Nếu None, sẽ dùng đường dẫn tương đối
     """
-    print("💾  Đang tạo file VTT cho thumbnails...")
+    print("💾  Đang tạo file VTT cho sprite sheet...")
+    
+    if not sprite_info:
+        print("⚠️  Không có thông tin sprite sheet")
+        return
     
     lines = ["WEBVTT", ""]
     
-    for i, thumb in enumerate(thumbnails):
-        start_time = thumb["timestamp"]
+    timestamps = sprite_info["timestamps"]
+    thumb_width = sprite_info["thumb_width"]
+    thumb_height = sprite_info["thumb_height"]
+    cols = sprite_info["cols"]
+    
+    # URL cho sprite sheet
+    if cdn_url:
+        sprite_url = cdn_url
+    else:
+        sprite_url = sprite_info["relative_path"]
+    
+    for i, timestamp in enumerate(timestamps):
+        start_time = timestamp
         end_time = start_time + interval
         
-        start_str = _format_timestamp(start_time)
-        end_str = _format_timestamp(end_time)
+        # Format thời gian: MM:SS.mmm (phút:giây.mili)
+        start_mins = int(start_time // 60)
+        start_secs = start_time % 60
+        start_str = f"{start_mins:02d}:{start_secs:06.3f}"
+        
+        end_mins = int(end_time // 60)
+        end_secs = end_time % 60
+        end_str = f"{end_mins:02d}:{end_secs:06.3f}"
+        
+        # Tính vị trí của thumbnail trong sprite sheet
+        row = i // cols
+        col = i % cols
+        x = col * thumb_width
+        y = row * thumb_height
+        
+        # Format: URL#xywh=x,y,width,height
+        xywh = f"#xywh={x},{y},{thumb_width},{thumb_height}"
         
         lines.append(f"{start_str} --> {end_str}")
-        lines.append(thumb["relative_path"])
+        lines.append(f"{sprite_url}{xywh}")
         lines.append("")
     
     with open(output_vtt, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     
-    print(f"✅  Đã tạo file VTT thumbnails: {output_vtt}")
+    print(f"✅  Đã tạo file VTT sprite sheet: {output_vtt}")
+    print(f"ℹ️   Sprite URL: {sprite_url}")
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Tải video từ m3u8, tách audio và nhận dạng giọng nói bằng Whisper")
@@ -215,8 +336,13 @@ def main() -> None:
     parser.add_argument("--save-video", action="store_true", help="Lưu file video (mặc định: lưu tất cả nếu không chỉ định)")
     parser.add_argument("--save-audio", action="store_true", help="Lưu file audio (mặc định: lưu tất cả nếu không chỉ định)")
     parser.add_argument("--save-vtt", action="store_true", help="Lưu file VTT phụ đề (mặc định: lưu tất cả nếu không chỉ định)")
-    parser.add_argument("--create-thumbnails", action="store_true", help="Tạo thumbnails và VTT cho thumbnails")
+    parser.add_argument("--create-thumbnails", action="store_true", help="Tạo sprite sheet thumbnails và VTT")
     parser.add_argument("--thumbnail-interval", type=int, default=5, help="Khoảng thời gian giữa các thumbnail (giây, mặc định: 5)")
+    parser.add_argument("--thumb-width", type=int, default=160, help="Chiều rộng mỗi thumbnail (px, mặc định: 160)")
+    parser.add_argument("--thumb-height", type=int, default=90, help="Chiều cao mỗi thumbnail (px, mặc định: 90)")
+    parser.add_argument("--thumb-cols", type=int, default=10, help="Số cột trong sprite sheet (mặc định: 10)")
+    parser.add_argument("--thumb-format", choices=["webp", "jpg"], default="webp", help="Định dạng ảnh sprite sheet (mặc định: webp)")
+    parser.add_argument("--cdn-url", help="URL CDN cho sprite sheet (ví dụ: https://cdn.example.com/thumbs/sprite.webp)")
     args = parser.parse_args()
 
     # Kiểm tra FFmpeg
@@ -360,9 +486,14 @@ def main() -> None:
     # --- Tùy chọn tạo thumbnails ---
     create_thumbnails = args.create_thumbnails
     thumbnail_interval = args.thumbnail_interval
+    thumb_width = args.thumb_width
+    thumb_height = args.thumb_height
+    thumb_cols = args.thumb_cols
+    thumb_format = args.thumb_format
+    cdn_url = args.cdn_url
     
     if not create_thumbnails:
-        create_thumb_choice = input("\n🖼️  Bạn có muốn tạo thumbnails từ video không? (y/N): ").strip().lower()
+        create_thumb_choice = input("\n🖼️  Bạn có muốn tạo sprite sheet thumbnails từ video không? (y/N): ").strip().lower()
         if create_thumb_choice == "y":
             create_thumbnails = True
             
@@ -371,7 +502,41 @@ def main() -> None:
             if interval_input.isdigit() and int(interval_input) > 0:
                 thumbnail_interval = int(interval_input)
             
-            print(f"✅ Sẽ tạo thumbnails mỗi {thumbnail_interval}s")
+            # Hỏi kích thước thumbnail
+            print(f"\nℹ️  Kích thước mặc định: {thumb_width}x{thumb_height}px")
+            size_input = input("📐 Thay đổi kích thước? (Nhấn Enter để giữ mặc định hoặc nhập 'w,h' ví dụ: 160,90): ").strip()
+            if size_input and "," in size_input:
+                try:
+                    w, h = size_input.split(",")
+                    thumb_width = int(w.strip())
+                    thumb_height = int(h.strip())
+                    print(f"✅ Đã đặt kích thước: {thumb_width}x{thumb_height}px")
+                except:
+                    print(f"⚠️  Định dạng không hợp lệ, giữ mặc định {thumb_width}x{thumb_height}px")
+            
+            # Hỏi số cột
+            cols_input = input(f"📊 Số cột trong sprite sheet (mặc định {thumb_cols}): ").strip()
+            if cols_input.isdigit() and int(cols_input) > 0:
+                thumb_cols = int(cols_input)
+            
+            # Hỏi định dạng ảnh
+            print(f"\n🎨 Chọn định dạng ảnh:")
+            print(f"  1. WebP (nhẹ hơn, chất lượng tốt - khuyến nghị)")
+            print(f"  2. JPG (tương thích rộng)")
+            format_choice = input(f"👉 Chọn (1-2, mặc định 1): ").strip()
+            if format_choice == "2":
+                thumb_format = "jpg"
+            else:
+                thumb_format = "webp"
+            
+            # Hỏi CDN URL (tùy chọn)
+            cdn_input = input(f"🌐 URL CDN cho sprite sheet (Nhấn Enter để bỏ qua): ").strip()
+            if cdn_input:
+                cdn_url = cdn_input
+            
+            print(f"✅ Sẽ tạo sprite sheet: {thumb_cols} cột, {thumb_width}x{thumb_height}px, {thumb_format.upper()}, mỗi {thumbnail_interval}s")
+            if cdn_url:
+                print(f"✅ Sử dụng CDN URL: {cdn_url}")
 
     # Menu chọn ngôn ngữ (giữ nguyên như cũ)
     language = args.language
@@ -436,12 +601,12 @@ def main() -> None:
     if save_vtt:
         save_subtitles(result, vtt_path)
     
-    # Tạo thumbnails nếu được yêu cầu
-    thumbnails = []
+    # Tạo sprite sheet thumbnails nếu được yêu cầu
+    sprite_info = {}
     if create_thumbnails:
-        thumbnails = extract_thumbnails(video_path, base_dir, thumbnail_interval)
-        if thumbnails:
-            create_thumbnail_vtt(thumbnails, thumbnail_vtt_path, thumbnail_interval)
+        sprite_info = extract_thumbnails(video_path, base_dir, thumbnail_interval, thumb_width, thumb_height, thumb_cols, thumb_format)
+        if sprite_info:
+            create_thumbnail_vtt(sprite_info, thumbnail_vtt_path, thumbnail_interval, cdn_url)
     
     # Dọn dẹp các file không cần thiết
     print("\n🧹 Đang dọn dẹp...")
@@ -468,8 +633,10 @@ def main() -> None:
         files_saved.append(f"🎵 Audio: audio.wav")
     if save_vtt and os.path.exists(vtt_path):
         files_saved.append(f"📝 Phụ đề: {os.path.basename(vtt_path)}")
-    if thumbnails and os.path.exists(thumbnail_vtt_path):
-        files_saved.append(f"🖼️  Thumbnails: {len(thumbnails)} ảnh + thumbnails.vtt")
+    if sprite_info and os.path.exists(thumbnail_vtt_path):
+        sprite_file = sprite_info.get("sprite_filename", "sprite.jpg")
+        thumb_count = sprite_info.get("total_thumbs", 0)
+        files_saved.append(f"🖼️  Sprite sheet: {sprite_file} ({thumb_count} thumbnails) + thumbnails.vtt")
     
     for file_info in files_saved:
         print(file_info)
