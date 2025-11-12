@@ -5,6 +5,8 @@ import whisper
 import datetime
 from typing import Optional
 import sys
+import threading
+import time
 
 def check_ffmpeg():
     """Kiểm tra FFmpeg đã cài đặt chưa"""
@@ -26,13 +28,71 @@ def validate_url(url: str) -> bool:
 def download_from_m3u8(m3u8_url: str, output_path: str = "video.mp4") -> str:
     print("⬇️  Đang tải video từ m3u8...")
     try:
+        # First probe to get duration
+        print("   Đang kiểm tra thông tin video...")
+        probe_cmd = [
+            "ffmpeg", "-i", m3u8_url,
+            "-f", "null", "-"
+        ]
+        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+        
+        duration = 0
+        output = probe_result.stderr if probe_result.stderr else ""
+        for line in output.split('\n'):
+            if "Duration:" in line:
+                time_str = line.split("Duration:")[1].split(",")[0].strip()
+                h, m, s = time_str.split(":")
+                duration = int(h) * 3600 + int(m) * 60 + float(s)
+                break
+        
+        if duration > 0:
+            print(f"   Độ dài video: {int(duration)}s")
+        
+        # Now download with progress
         cmd = [
             "ffmpeg", "-y",
             "-i", m3u8_url,
             "-c", "copy",
+            "-progress", "pipe:1",
             output_path
         ]
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        last_time = 0
+        
+        while True:
+            line = process.stdout.readline()
+            if not line:
+                break
+            
+            line = line.strip()
+            
+            # Parse progress output: out_time_ms=123456
+            if line.startswith("out_time_ms="):
+                try:
+                    time_ms = int(line.split("=")[1])
+                    current_time = time_ms / 1_000_000  # Convert to seconds
+                    
+                    if current_time > last_time:
+                        last_time = current_time
+                        if duration > 0:
+                            # Show progress bar with %
+                            print_progress(int(current_time), int(duration), prefix='Tải video')
+                        else:
+                            # Just show time if duration unknown
+                            mins = int(current_time // 60)
+                            secs = current_time % 60
+                            print(f"\r⬇️  Tải video: {mins:02d}:{secs:06.3f}", end='', flush=True)
+                except:
+                    pass
+        
+        return_code = process.wait()
+        if return_code != 0:
+            stderr = process.stderr.read()
+            raise subprocess.CalledProcessError(return_code, cmd, stderr=stderr)
+        
+        print(f"✅ Tải video thành công")
         return output_path
     except subprocess.CalledProcessError as e:
         print(f"\n❌ LỖI: Không thể tải video từ URL: {m3u8_url}")
@@ -43,10 +103,59 @@ def download_from_m3u8(m3u8_url: str, output_path: str = "video.mp4") -> str:
 def extract_audio(video_path: str, audio_path: str = "audio.wav") -> str:
     print("🎧  Đang tách audio...")
     try:
-        subprocess.run([
+        # First get total duration
+        probe_cmd = [
+            "ffmpeg", "-i", video_path,
+            "-f", "null", "-"
+        ]
+        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+        
+        duration = 0
+        output = probe_result.stderr if probe_result.stderr else ""
+        for line in output.split('\n'):
+            if "Duration:" in line:
+                time_str = line.split("Duration:")[1].split(",")[0].strip()
+                h, m, s = time_str.split(":")
+                duration = int(h) * 3600 + int(m) * 60 + float(s)
+                break
+        
+        # Now extract audio with progress
+        cmd = [
             "ffmpeg", "-y", "-i", video_path, "-vn", "-acodec", "pcm_s16le",
-            "-ar", "16000", "-ac", "1", audio_path
-        ], check=True, capture_output=True)
+            "-ar", "16000", "-ac", "1", "-progress", "pipe:1", audio_path
+        ]
+        
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        while True:
+            line = process.stdout.readline()
+            if not line:
+                break
+            
+            line = line.strip()
+            
+            # Parse progress output: out_time_ms=123456
+            if line.startswith("out_time_ms="):
+                try:
+                    time_ms = int(line.split("=")[1])
+                    current_time = time_ms / 1_000_000  # Convert to seconds
+                    
+                    if duration > 0:
+                        percent = (current_time / duration) * 100
+                        print_progress(int(current_time), int(duration), prefix='Tách audio')
+                    else:
+                        mins = int(current_time // 60)
+                        secs = current_time % 60
+                        print(f"\r🎧  Tách audio: {mins:02d}:{secs:06.3f}", end='', flush=True)
+                except:
+                    pass
+        
+        return_code = process.wait()
+        if return_code != 0:
+            stderr = process.stderr.read()
+            raise subprocess.CalledProcessError(return_code, cmd, stderr=stderr)
+        
+        print(f"✅ Tách audio thành công")
         return audio_path
     except subprocess.CalledProcessError as e:
         print(f"\n❌ LỖI: Không thể tách audio từ video")
@@ -74,6 +183,63 @@ def result_to_vtt(result: dict) -> str:
         lines.append(text)
         lines.append("")
     return "\n".join(lines)
+
+
+def print_progress(current: int, total: int, prefix: str = '', bar_length: int = 40) -> None:
+    """In-place progress bar for console.
+
+    Args:
+        current: current completed count
+        total: total count
+        prefix: optional prefix message
+        bar_length: length of progress bar in characters
+    """
+    if total <= 0:
+        return
+    percent = float(current) / float(total)
+    filled = int(bar_length * percent)
+    # use ASCII-safe characters to avoid encoding issues on Windows consoles
+    bar = '=' * filled + '-' * (bar_length - filled)
+    # \r to overwrite the same line
+    try:
+        print(f"\r{prefix} |{bar}| {current}/{total} ({percent*100:5.1f}%)", end='', flush=True)
+    except UnicodeEncodeError:
+        # fallback without special formatting
+        print(f"\r{prefix} [{current}/{total}] {percent*100:5.1f}%", end='', flush=True)
+    if current >= total:
+        print()
+
+
+class Spinner:
+    """Simple spinner to show activity for long-running subprocesses."""
+    def __init__(self, message: str = ''):
+        self._running = False
+        self._thread = None
+        self.message = message
+
+    def _spin(self):
+        chars = ['|', '/', '-', '\\']
+        idx = 0
+        while self._running:
+            print(f"\r{self.message} {chars[idx % len(chars)]}", end='', flush=True)
+            idx += 1
+            time.sleep(0.12)
+        # clear line after stop
+        print('\r' + ' ' * (len(self.message) + 4) + '\r', end='', flush=True)
+
+    def start(self):
+        if self._running:
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        if not self._running:
+            return
+        self._running = False
+        if self._thread:
+            self._thread.join()
 
 
 def transcribe_audio(audio_path: str, model_name: str = "small", lang: Optional[str] = None, task: str = "transcribe") -> dict:
@@ -159,11 +325,15 @@ def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5, thum
         temp_thumbs = []
         temp_dir = os.path.join(thumb_dir, "temp")
         os.makedirs(temp_dir, exist_ok=True)
-        
+
+        # Show progress while extracting individual thumbnails
+        print(f"📊  Tạo {thumb_count} thumbnails... (mỗi {interval}s)")
+        print_progress(0, thumb_count, prefix='Tạo thumbnails')
+
         for i, timestamp in enumerate(timestamps):
             thumb_filename = f"thumb{i:04d}.jpg"
             thumb_path = os.path.join(temp_dir, thumb_filename)
-            
+
             cmd = [
                 "ffmpeg", "-y",
                 "-ss", str(timestamp),
@@ -173,10 +343,12 @@ def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5, thum
                 "-q:v", "2",
                 thumb_path
             ]
-            
+
             subprocess.run(cmd, capture_output=True, check=True)
             temp_thumbs.append(thumb_path)
-        
+            # Update console progress
+            print_progress(i + 1, thumb_count, prefix='Tạo thumbnails')
+
         print(f"✅  Đã tạo {len(temp_thumbs)} thumbnails tạm")
         
         # Tạo sprite sheet từ các thumbnails
@@ -186,48 +358,30 @@ def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5, thum
         sprite_filename = f"sprite.{image_format}"
         sprite_path = os.path.join(thumb_dir, sprite_filename)
         
-        print(f"🎨  Đang ghép sprite sheet ({sprite_width}x{sprite_height})...")
-        
-        # Sử dụng FFmpeg để tạo sprite sheet
-        # Tạo filter complex để sắp xếp các ảnh vào grid
-        inputs = []
-        for thumb in temp_thumbs:
-            inputs.extend(["-i", thumb])
-        
-        # Tạo filter complex
-        filter_parts = []
-        for i in range(thumb_count):
-            filter_parts.append(f"[{i}:v]")
-        
-        # xstack filter để sắp xếp theo grid
-        xstack_inputs = "".join(filter_parts)
-        
-        # Tính layout cho xstack
-        layout = []
-        for i in range(thumb_count):
-            row = i // cols
-            col = i % cols
-            x = col * thumb_width
-            y = row * thumb_height
-            layout.append(f"{x}_{y}")
-        
-        layout_str = "|".join(layout)
-        
-        filter_complex = f"{xstack_inputs}xstack=inputs={thumb_count}:layout={layout_str}:fill=black[out]"
+        # Sử dụng FFmpeg để tạo sprite sheet với tile filter (tối ưu cho video dài)
+        # Tile filter xếp các ảnh vào lưới một cách hiệu quả hơn xstack
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", os.path.join(temp_dir, "thumb%04d.jpg"),
+            "-vf", f"tile={cols}x{rows}:margin=0:padding=0",
+        ]
         
         # Tùy chọn encoding tùy theo định dạng
         if image_format.lower() == "webp":
-            encoding_options = ["-quality", "90"]  # WebP quality (0-100)
+            cmd.extend(["-quality", "90"])  # WebP quality (0-100)
         else:
-            encoding_options = ["-q:v", "2"]  # JPEG quality (2-31, thấp hơn = tốt hơn)
+            cmd.extend(["-q:v", "2"])  # JPEG quality (2-31, thấp hơn = tốt hơn)
         
-        cmd = inputs + [
-            "-filter_complex", filter_complex,
-            "-map", "[out]",
-        ] + encoding_options + [sprite_path]
+        cmd.append(sprite_path)
         
-        subprocess.run(["ffmpeg", "-y"] + cmd, capture_output=True, check=True)
-        
+        # Run sprite creation with a spinner to indicate activity (can take time)
+        spinner = Spinner(f"🎨  Ghép sprite sheet ({sprite_width}x{sprite_height})...")
+        spinner.start()
+        try:
+            subprocess.run(cmd, capture_output=True, check=True)
+        finally:
+            spinner.stop()
+
         print(f"✅  Đã tạo sprite sheet: {sprite_filename}")
         
         # Xóa các thumbnails tạm
