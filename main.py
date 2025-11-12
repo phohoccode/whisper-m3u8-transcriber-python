@@ -7,6 +7,9 @@ from typing import Optional
 import sys
 import threading
 import time
+import torch
+import json
+from typing import List
 
 def check_ffmpeg():
     """Kiểm tra FFmpeg đã cài đặt chưa"""
@@ -21,6 +24,76 @@ def check_ffmpeg():
         sys.exit(1)
 
 
+def check_gpu():
+    """Kiểm tra GPU và CUDA"""
+    try:
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            gpu_count = torch.cuda.device_count()
+            print(f"✅ GPU được phát hiện: {gpu_name} (x{gpu_count})")
+            return True
+        else:
+            print("⚠️  Không tìm thấy GPU, sẽ dùng CPU (chậm hơn)")
+            return False
+    except Exception as e:
+        print(f"⚠️  Lỗi kiểm tra GPU: {e}")
+        return False
+
+
+def _get_config_path() -> str:
+    """Return path to config file in user home directory."""
+    home = os.path.expanduser("~")
+    return os.path.join(home, ".whisper_m3u8_transcriber_config.json")
+
+
+def load_recent_paths() -> List[str]:
+    """Load recent paths from config file. Returns list (may be empty)."""
+    cfg = _get_config_path()
+    try:
+        if os.path.exists(cfg):
+            with open(cfg, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                paths = data.get("recent_paths", [])
+                # keep only strings and existing ones are optional
+                return [p for p in paths if isinstance(p, str)]
+    except Exception:
+        pass
+    return []
+
+
+def save_recent_paths(paths: List[str]) -> None:
+    """Save recent paths list to config file."""
+    cfg = _get_config_path()
+    try:
+        data = {"recent_paths": paths}
+        with open(cfg, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def add_recent_path(path: str, max_entries: int = 10) -> None:
+    """Add a path to recent list (move to front), cap to max_entries."""
+    try:
+        path = os.path.abspath(path)
+        paths = load_recent_paths()
+        if path in paths:
+            paths.remove(path)
+        paths.insert(0, path)
+        # remove duplicates and cap
+        seen = []
+        out = []
+        for p in paths:
+            if p not in seen:
+                seen.append(p)
+                out.append(p)
+            if len(out) >= max_entries:
+                break
+        save_recent_paths(out)
+    except Exception:
+        pass
+
+
 def validate_url(url: str) -> bool:
     """Kiểm tra URL hợp lệ"""
     return url.startswith(("http://", "https://")) and ".m3u8" in url.lower()
@@ -28,27 +101,11 @@ def validate_url(url: str) -> bool:
 def download_from_m3u8(m3u8_url: str, output_path: str = "video.mp4") -> str:
     print("⬇️  Đang tải video từ m3u8...")
     try:
-        # First probe to get duration
-        print("   Đang kiểm tra thông tin video...")
-        probe_cmd = [
-            "ffmpeg", "-i", m3u8_url,
-            "-f", "null", "-"
-        ]
-        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+        # Bỏ qua probe - chỉ tải trực tiếp (probe thường bị hang với m3u8 từ xa)
+        # Thay vào đó, ta sẽ lấy duration từ output của tải xuống
+        print("   Bắt đầu tải...")
         
-        duration = 0
-        output = probe_result.stderr if probe_result.stderr else ""
-        for line in output.split('\n'):
-            if "Duration:" in line:
-                time_str = line.split("Duration:")[1].split(",")[0].strip()
-                h, m, s = time_str.split(":")
-                duration = int(h) * 3600 + int(m) * 60 + float(s)
-                break
-        
-        if duration > 0:
-            print(f"   Độ dài video: {int(duration)}s")
-        
-        # Now download with progress
+        # Now download with progress - bỏ -progress để tránh hang
         cmd = [
             "ffmpeg", "-y",
             "-i", m3u8_url,
@@ -60,105 +117,175 @@ def download_from_m3u8(m3u8_url: str, output_path: str = "video.mp4") -> str:
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
         last_time = 0
+        duration = 0
+        duration_found = False
+        spinner = Spinner("   Đang tải...")
+        spinner.start()
         
-        while True:
-            line = process.stdout.readline()
-            if not line:
-                break
-            
-            line = line.strip()
-            
-            # Parse progress output: out_time_ms=123456
-            if line.startswith("out_time_ms="):
-                try:
-                    time_ms = int(line.split("=")[1])
-                    current_time = time_ms / 1_000_000  # Convert to seconds
-                    
-                    if current_time > last_time:
-                        last_time = current_time
-                        if duration > 0:
-                            # Show progress bar with %
-                            print_progress(int(current_time), int(duration), prefix='Tải video')
-                        else:
-                            # Just show time if duration unknown
-                            mins = int(current_time // 60)
-                            secs = current_time % 60
-                            print(f"\r⬇️  Tải video: {mins:02d}:{secs:06.3f}", end='', flush=True)
-                except:
-                    pass
+        # Thread để đọc stderr và tìm duration
+        def read_stderr():
+            nonlocal duration, duration_found
+            try:
+                for line in process.stderr:
+                    if "Duration:" in line and not duration_found:
+                        try:
+                            time_str = line.split("Duration:")[1].split(",")[0].strip()
+                            h, m, s = time_str.split(":")
+                            duration = int(h) * 3600 + int(m) * 60 + float(s)
+                            duration_found = True
+                            spinner.stop()
+                            print(f"   Độ dài video: {int(duration)}s")
+                            spinner.start()
+                        except:
+                            pass
+            except:
+                pass
+        
+        stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+        stderr_thread.start()
+        
+        try:
+            while True:
+                line = process.stdout.readline()
+                if not line:
+                    break
+                
+                line = line.strip()
+                
+                # Parse progress output: out_time_ms=123456
+                if line.startswith("out_time_ms="):
+                    try:
+                        time_ms = int(line.split("=")[1])
+                        current_time = time_ms / 1_000_000  # Convert to seconds
+                        
+                        if current_time > last_time and duration_found:
+                            last_time = current_time
+                            spinner.stop()
+                            if duration > 0:
+                                # Show progress bar with %
+                                print_progress(int(current_time), int(duration), prefix='Tải video')
+                            else:
+                                # Just show time if duration unknown
+                                mins = int(current_time // 60)
+                                secs = current_time % 60
+                                print(f"\r⬇️  Tải video: {mins:02d}:{secs:06.3f}", end='', flush=True)
+                            spinner.start()
+                    except:
+                        pass
+        finally:
+            spinner.stop()
         
         return_code = process.wait()
+        stderr_thread.join(timeout=1)
+        
         if return_code != 0:
-            stderr = process.stderr.read()
-            raise subprocess.CalledProcessError(return_code, cmd, stderr=stderr)
+            stderr_output = process.stderr.read() if process.stderr else ""
+            raise subprocess.CalledProcessError(return_code, cmd, stderr=stderr_output)
         
         print(f"✅ Tải video thành công")
         return output_path
     except subprocess.CalledProcessError as e:
         print(f"\n❌ LỖI: Không thể tải video từ URL: {m3u8_url}")
-        print(f"Chi tiết lỗi: {e.stderr}")
+        print(f"💡 Gợi ý: Kiểm tra URL m3u8 và kết nối internet")
+        if hasattr(e, 'stderr') and e.stderr:
+            print(f"Chi tiết: {str(e.stderr)[:200]}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n❌ LỖI: {str(e)}")
         sys.exit(1)
 
 
 def extract_audio(video_path: str, audio_path: str = "audio.wav") -> str:
     print("🎧  Đang tách audio...")
     try:
-        # First get total duration
+        # Get duration từ video info
         probe_cmd = [
             "ffmpeg", "-i", video_path,
             "-f", "null", "-"
         ]
-        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
         
         duration = 0
-        output = probe_result.stderr if probe_result.stderr else ""
-        for line in output.split('\n'):
-            if "Duration:" in line:
-                time_str = line.split("Duration:")[1].split(",")[0].strip()
-                h, m, s = time_str.split(":")
-                duration = int(h) * 3600 + int(m) * 60 + float(s)
-                break
+        try:
+            # Timeout 10 giây cho probe
+            probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=10)
+            output = probe_result.stderr if probe_result.stderr else ""
+            for line in output.split('\n'):
+                if "Duration:" in line:
+                    time_str = line.split("Duration:")[1].split(",")[0].strip()
+                    h, m, s = time_str.split(":")
+                    duration = int(h) * 3600 + int(m) * 60 + float(s)
+                    break
+        except subprocess.TimeoutExpired:
+            print("   ⚠️  Timeout khi lấy duration, sẽ hiển thị tiến độ theo thời gian")
+            duration = 0
+        except Exception as e:
+            print(f"   ⚠️  Lỗi nhỏ khi probe: {e}")
+            duration = 0
         
-        # Now extract audio with progress
+        # Extract audio with progress
         cmd = [
             "ffmpeg", "-y", "-i", video_path, "-vn", "-acodec", "pcm_s16le",
             "-ar", "16000", "-ac", "1", "-progress", "pipe:1", audio_path
         ]
         
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+                                   text=True, bufsize=1)
         
-        while True:
-            line = process.stdout.readline()
-            if not line:
-                break
-            
-            line = line.strip()
-            
-            # Parse progress output: out_time_ms=123456
-            if line.startswith("out_time_ms="):
-                try:
-                    time_ms = int(line.split("=")[1])
-                    current_time = time_ms / 1_000_000  # Convert to seconds
-                    
-                    if duration > 0:
-                        percent = (current_time / duration) * 100
-                        print_progress(int(current_time), int(duration), prefix='Tách audio')
-                    else:
-                        mins = int(current_time // 60)
-                        secs = current_time % 60
-                        print(f"\r🎧  Tách audio: {mins:02d}:{secs:06.3f}", end='', flush=True)
-                except:
-                    pass
+        spinner = Spinner("   Tách audio...")
+        spinner.start()
         
-        return_code = process.wait()
+        last_time = 0
+        try:
+            while True:
+                line = process.stdout.readline()
+                if not line:
+                    break
+                
+                line = line.strip()
+                
+                # Parse progress output: out_time_ms=123456
+                if line.startswith("out_time_ms="):
+                    try:
+                        time_ms = int(line.split("=")[1])
+                        current_time = time_ms / 1_000_000  # Convert to seconds
+                        
+                        if current_time > last_time:
+                            last_time = current_time
+                            spinner.stop()
+                            
+                            if duration > 0:
+                                print_progress(int(current_time), int(duration), prefix='Tách audio')
+                            else:
+                                mins = int(current_time // 60)
+                                secs = current_time % 60
+                                print(f"\r🎧  Tách audio: {mins:02d}:{secs:06.3f}", end='', flush=True)
+                            
+                            spinner.start()
+                    except:
+                        pass
+        finally:
+            spinner.stop()
+        
+        return_code = process.wait(timeout=300)  # 5 min timeout
+        
         if return_code != 0:
-            stderr = process.stderr.read()
+            try:
+                stderr = process.stderr.read()
+            except:
+                stderr = ""
             raise subprocess.CalledProcessError(return_code, cmd, stderr=stderr)
         
         print(f"✅ Tách audio thành công")
         return audio_path
+    except subprocess.TimeoutExpired:
+        print(f"\n❌ LỖI: Timeout khi tách audio (quá 5 phút)")
+        sys.exit(1)
     except subprocess.CalledProcessError as e:
         print(f"\n❌ LỖI: Không thể tách audio từ video")
+        print(f"💡 Gợi ý: Kiểm tra file video có lỗi không")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n❌ LỖI: {str(e)}")
         sys.exit(1)
 
 
@@ -242,13 +369,20 @@ class Spinner:
             self._thread.join()
 
 
-def transcribe_audio(audio_path: str, model_name: str = "small", lang: Optional[str] = None, task: str = "transcribe") -> dict:
+def transcribe_audio(audio_path: str, model_name: str = "small", lang: Optional[str] = None, task: str = "transcribe", use_gpu: bool = True) -> dict:
     print("🧠  Đang nhận dạng giọng nói bằng Whisper...")
     try:
-        model = whisper.load_model(model_name)
+        # Xác định device
+        device = "cuda" if use_gpu and torch.cuda.is_available() else "cpu"
+        print(f"   📱 Dùng: {device.upper()}")
+        
+        # Load model với device
+        model = whisper.load_model(model_name, device=device)
+        
         kwargs = {"task": task, "verbose": True}
         if lang:
             kwargs["language"] = lang
+        
         result = model.transcribe(audio_path, **kwargs)
         return result
     except Exception as e:
@@ -497,10 +631,15 @@ def main() -> None:
     parser.add_argument("--thumb-cols", type=int, default=10, help="Số cột trong sprite sheet (mặc định: 10)")
     parser.add_argument("--thumb-format", choices=["webp", "jpg"], default="webp", help="Định dạng ảnh sprite sheet (mặc định: webp)")
     parser.add_argument("--cdn-url", help="URL CDN cho sprite sheet (ví dụ: https://cdn.example.com/thumbs/sprite.webp)")
+    parser.add_argument("--no-gpu", action="store_true", help="Bắt buộc dùng CPU thay vì GPU")
     args = parser.parse_args()
 
     # Kiểm tra FFmpeg
     check_ffmpeg()
+    
+    # Kiểm tra GPU
+    use_gpu = not args.no_gpu
+    check_gpu()
 
     # Nhập và validate URL
     m3u8_link = args.m3u8
@@ -520,33 +659,72 @@ def main() -> None:
     # Chọn thư mục lưu trữ
     output_dir = args.output_dir
     if not output_dir:
+        recent = load_recent_paths()
         print("\n📂 Chọn nơi lưu trữ:")
         print("1. Thư mục hiện tại")
-        print("2. Nhập đường dẫn tùy chỉnh")
-        
-        dir_choice = input("👉 Chọn (1-2): ").strip()
-        
-        if dir_choice == "2":
+        if recent:
+            print("2. Chọn từ các đường dẫn đã dùng trước (gợi ý)")
+            print("3. Nhập đường dẫn tùy chỉnh")
+            dir_choice = input("👉 Chọn (1-3): ").strip()
+        else:
+            print("2. Nhập đường dẫn tùy chỉnh")
+            dir_choice = input("👉 Chọn (1-2): ").strip()
+
+        if dir_choice == "1":
+            output_dir = os.getcwd()
+            print(f"✅ Sẽ lưu vào thư mục hiện tại: {output_dir}")
+            add_recent_path(output_dir)
+
+        elif dir_choice == "2" and recent:
+            # show recent list
+            print("\n📁 Đường dẫn đã dùng trước:")
+            for i, p in enumerate(recent, start=1):
+                print(f"  {i}. {p}")
+            print(f"  {len(recent)+1}. Nhập đường dẫn mới")
+            sel = input(f"👉 Chọn (1-{len(recent)+1}): ").strip()
+            try:
+                idx = int(sel)
+                if 1 <= idx <= len(recent):
+                    output_dir = recent[idx-1]
+                    print(f"✅ Chọn: {output_dir}")
+                    # Ensure exists or ask to create
+                    try:
+                        os.makedirs(output_dir, exist_ok=True)
+                    except Exception:
+                        print("⚠️  Không thể tạo hoặc truy cập thư mục đã chọn")
+                    add_recent_path(output_dir)
+                else:
+                    # fallthrough to custom input
+                    output_dir = None
+            except ValueError:
+                output_dir = None
+
+        else:
+            # custom path input (either choice 2 when no recent, or explicit 3, or fallback)
             while True:
                 output_dir = input("💾 Nhập đường dẫn thư mục (ví dụ: E:\\Videos\\Subtitles): ").strip()
                 # Xóa dấu ngoặc kép nếu user copy-paste từ Windows Explorer
                 output_dir = output_dir.strip('"').strip("'")
-                
                 # Tạo thư mục nếu chưa tồn tại
                 try:
                     os.makedirs(output_dir, exist_ok=True)
                     print(f"✅ Sẽ lưu vào: {output_dir}")
+                    add_recent_path(output_dir)
                     break
                 except Exception as e:
                     print(f"❌ Đường dẫn không hợp lệ: {e}")
                     print("Vui lòng nhập lại!\n")
-        else:
-            output_dir = os.getcwd()
-            print(f"✅ Sẽ lưu vào thư mục hiện tại: {output_dir}")
     else:
         # Tạo thư mục nếu được truyền qua CLI
-        os.makedirs(output_dir, exist_ok=True)
-        print(f"✅ Sẽ lưu vào: {output_dir}")
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+            print(f"✅ Sẽ lưu vào: {output_dir}")
+            add_recent_path(output_dir)
+        except Exception as e:
+            print(f"❌ Không thể tạo thư mục đầu ra đã truyền: {e}")
+            print("Sẽ dùng thư mục hiện tại thay thế.")
+            output_dir = os.getcwd()
+            add_recent_path(output_dir)
 
     # --- Tùy chọn nhóm 3 file vào thư mục con mới ---
     group_name = args.group_name
@@ -749,7 +927,7 @@ def main() -> None:
     # Xử lý
     video = download_from_m3u8(m3u8_link, video_path)
     audio = extract_audio(video, audio_path)
-    result = transcribe_audio(audio, model_name=args.model, lang=language)
+    result = transcribe_audio(audio, model_name=args.model, lang=language, use_gpu=use_gpu)
     
     # Lưu các file theo lựa chọn của người dùng
     if save_vtt:

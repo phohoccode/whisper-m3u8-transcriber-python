@@ -9,7 +9,8 @@ Công cụ tải video từ URL m3u8, tách âm thanh và nhận dạng giọng 
 3. [Cài đặt](#cài-đặt)
 4. [Cách sử dụng](#cách-sử-dụng)
 5. [Các tuỳ chọn dòng lệnh](#các-tuỳ-chọn-dòng-lệnh)
-6. [Ví dụ sử dụng](#ví-dụ-sử-dụng)
+6. [Sprite Sheet Thumbnails](#sprite-sheet-thumbnails)
+7. [Ví dụ sử dụng](#ví-dụ-sử-dụng)
 
 ---
 
@@ -23,6 +24,8 @@ Công cụ tải video từ URL m3u8, tách âm thanh và nhận dạng giọng 
 - ✅ **Nhóm file vào thư mục mới**: Tự động hoặc đặt tên tuỳ chỉnh
 - ✅ Hỗ trợ menu tương tác: chọn ngôn ngữ, chọn mô hình Whisper
 - ✅ Tự động nhận diện ngôn ngữ
+- ✅ **🆕 Tạo Sprite Sheet Thumbnails**: Tạo hình ảnh sprite sheet từ video, hỗ trợ WebP và JPG
+- ✅ **🆕 VTT cho Sprite Sheet**: Tự động tạo file VTT kèm tọa độ sprite (xywh)
 
 ---
 
@@ -113,23 +116,126 @@ Script sẽ hỏi bạn:
 
 ## ⚙️ Các tuỳ chọn dòng lệnh
 
-| Tuỳ chọn          | Mô tả                            | Ví dụ                                                        |
-| ----------------- | -------------------------------- | ------------------------------------------------------------ |
-| `--m3u8`          | URL m3u8 hoặc đường dẫn file     | `--m3u8 "https://example.com/video.m3u8"`                    |
-| `--output-dir`    | Thư mục lưu trữ                  | `--output-dir "E:\Videos"`                                   |
-| `--group-name`    | Tên thư mục nhóm file (tuỳ chọn) | `--group-name "bai_hoc_1"`                                   |
-| `--language`      | Mã ngôn ngữ (ISO 639-1)          | `--language "vi"` (Việt), `--language "en"` (Anh)            |
-| `--model`         | Mô hình Whisper                  | `--model "tiny"`, `"base"`, `"small"`, `"medium"`, `"large"` |
-| `--output-prefix` | Tiền tố tên file                 | `--output-prefix "movie"` → `movie_vi.vtt`                   |
-| `--save-video`    | Lưu file video                   | Không có value, chỉ cần thêm flag                            |
-| `--save-audio`    | Lưu file audio (WAV)             | Không có value, chỉ cần thêm flag                            |
-| `--save-vtt`      | Lưu file phụ đề (VTT)            | Không có value, chỉ cần thêm flag                            |
+| Tuỳ chọn               | Mô tả                              | Ví dụ                                                        |
+| ---------------------- | ---------------------------------- | ------------------------------------------------------------ |
+| `--m3u8`               | URL m3u8 hoặc đường dẫn file       | `--m3u8 "https://example.com/video.m3u8"`                    |
+| `--output-dir`         | Thư mục lưu trữ                    | `--output-dir "E:\Videos"`                                   |
+| `--group-name`         | Tên thư mục nhóm file (tuỳ chọn)   | `--group-name "bai_hoc_1"`                                   |
+| `--language`           | Mã ngôn ngữ (ISO 639-1)            | `--language "vi"` (Việt), `--language "en"` (Anh)            |
+| `--model`              | Mô hình Whisper                    | `--model "tiny"`, `"base"`, `"small"`, `"medium"`, `"large"` |
+| `--output-prefix`      | Tiền tố tên file                   | `--output-prefix "movie"` → `movie_vi.vtt`                   |
+| `--save-video`         | Lưu file video                     | Không có value, chỉ cần thêm flag                            |
+| `--save-audio`         | Lưu file audio (WAV)               | Không có value, chỉ cần thêm flag                            |
+| `--save-vtt`           | Lưu file phụ đề (VTT)              | Không có value, chỉ cần thêm flag                            |
+| `--create-thumbnails`  | Tạo sprite sheet thumbnails        | Không có value, chỉ cần thêm flag                            |
+| `--thumbnail-interval` | Khoảng cách giữa thumbnails (giây) | `--thumbnail-interval 5` (mặc định: 5)                       |
+| `--thumb-width`        | Chiều rộng mỗi thumbnail (px)      | `--thumb-width 160` (mặc định: 160)                          |
+| `--thumb-height`       | Chiều cao mỗi thumbnail (px)       | `--thumb-height 90` (mặc định: 90)                           |
+| `--thumb-cols`         | Số cột trong sprite sheet          | `--thumb-cols 10` (mặc định: 10)                             |
+| `--thumb-format`       | Định dạng ảnh sprite sheet         | `--thumb-format "webp"` hoặc `"jpg"` (mặc định: webp)        |
+| `--cdn-url`            | URL CDN cho sprite sheet           | `--cdn-url "https://cdn.example.com/sprite.webp"`            |
+| `--no-gpu`             | Bắt buộc dùng CPU thay vì GPU      | Không có value, chỉ cần thêm flag                            |
 
 **Ghi chú**: Nếu bạn cung cấp các flag `--save-*`, script sẽ **chỉ lưu những file bạn chỉ định**. Nếu không cung cấp, script sẽ hỏi qua menu.
 
 ---
 
-## 📌 Ví dụ sử dụng
+## �️ Sprite Sheet Thumbnails
+
+Script có thể tự động tạo **sprite sheet thumbnails** từ video - đây là một hình ảnh duy nhất chứa nhiều ảnh nhỏ được xếp thành lưới. Rất hữu ích cho phát triển các ứng dụng video player.
+
+### Tính năng Sprite Sheet
+
+- 📸 Tạo thumbnails từ các khung hình của video
+- 🎨 Hỗ trợ định dạng **WebP** (nhẹ, chất lượng tốt) hoặc **JPG** (tương thích rộng)
+- 🔗 Tạo file **VTT** kèm theo với tọa độ xywh để sử dụng trong video player
+- ⚙️ Tùy chỉnh hoàn toàn: khoảng cách, kích thước, số cột
+- 🌐 Hỗ trợ URL CDN
+
+### Cách sử dụng
+
+#### Qua menu tương tác
+
+```powershell
+python .\main.py
+```
+
+Khi chạy, script sẽ hỏi:
+
+```
+🖼️  Bạn có muốn tạo sprite sheet thumbnails từ video không? (y/N): y
+⏱️  Nhập khoảng thời gian giữa các thumbnail (giây, mặc định 5): 3
+📐 Thay đổi kích thước? (Nhấn Enter để giữ mặc định hoặc nhập 'w,h' ví dụ: 160,90):
+📊 Số cột trong sprite sheet (mặc định 10): 8
+🎨 Chọn định dạng ảnh:
+  1. WebP (nhẹ hơn, chất lượng tốt - khuyến nghị)
+  2. JPG (tương thích rộng)
+👉 Chọn (1-2, mặc định 1): 1
+🌐 URL CDN cho sprite sheet (Nhấn Enter để bỏ qua):
+```
+
+#### Qua CLI
+
+```powershell
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --create-thumbnails `
+  --thumbnail-interval 5 `
+  --thumb-cols 10 `
+  --thumb-format "webp"
+```
+
+### Kết quả
+
+Sau khi hoàn tất, bạn sẽ có:
+
+```
+output-dir\
+└── group-name\
+    ├── video.mp4 (nếu chọn lưu)
+    ├── audio.wav (nếu chọn lưu)
+    ├── movie_vi.vtt (phụ đề)
+    ├── thumbnails.vtt (VTT cho sprite sheet)
+    └── thumbnails\
+        └── sprite.webp (hoặc sprite.jpg)
+```
+
+### File VTT cho Sprite Sheet
+
+File `thumbnails.vtt` tự động sinh ra với tọa độ xywh:
+
+```vtt
+WEBVTT
+
+00:00:00.000 --> 00:00:05.000
+thumbnails/sprite.webp#xywh=0,0,160,90
+
+00:00:05.000 --> 00:00:10.000
+thumbnails/sprite.webp#xywh=160,0,160,90
+
+00:00:10.000 --> 00:00:15.000
+thumbnails/sprite.webp#xywh=320,0,160,90
+```
+
+Bạn có thể dùng file này với các video player hỗ trợ CORS, hoặc tùy chỉnh CDN URL:
+
+```powershell
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --create-thumbnails `
+  --cdn-url "https://cdn.example.com/sprites/sprite.webp"
+```
+
+### Gợi ý
+
+- **WebP**: Dung lượng nhỏ hơn ~40% so với JPG, phù hợp cho web modern
+- **JPG**: Tương thích rộng, phù hợp cho các trình duyệt cũ
+- **Khoảng cách nhỏ hơn** (ví dụ: 2-3s): Nhiều thumbnails nhưng chi tiết cao
+- **Khoảng cách lớn hơn** (ví dụ: 10s+): Ít thumbnails nhưng file nhẹ hơn
+
+---
+
+## �📌 Ví dụ sử dụng
 
 ### Ví dụ 1: Lưu tất cả file với tên thư mục tuỳ chỉnh
 
@@ -224,7 +330,17 @@ Script sẽ hỏi từng bước:
 6. Video + VTT
 7. Audio + VTT
 ==================================================
-👉 Nhập lựa chọn (1-7): 4
+👉 Nhập lựa chọn (1-7): 1
+
+🖼️  Bạn có muốn tạo sprite sheet thumbnails từ video không? (y/N): y
+⏱️  Nhập khoảng thời gian giữa các thumbnail (giây, mặc định 5): 5
+📐 Thay đổi kích thước? (Nhấn Enter để giữ mặc định hoặc nhập 'w,h' ví dụ: 160,90):
+📊 Số cột trong sprite sheet (mặc định 10): 10
+🎨 Chọn định dạng ảnh:
+  1. WebP (nhẹ hơn, chất lượng tốt - khuyến nghị)
+  2. JPG (tương thích rộng)
+👉 Chọn (1-2, mặc định 1): 1
+🌐 URL CDN cho sprite sheet (Nhấn Enter để bỏ qua):
 
 🌍  CHỌN NGÔN NGỮ NHẬN DẠNG
 ==================================================
@@ -239,6 +355,66 @@ Script sẽ hỏi từng bước:
   0. ➕ Nhập mã khác
 ==================================================
 👉 Nhập lựa chọn của bạn: 1
+```
+
+---
+
+### Ví dụ 5: Tạo sprite sheet với URL CDN
+
+```powershell
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --output-dir "E:\Videos" `
+  --group-name "video_with_sprites" `
+  --save-video `
+  --save-audio `
+  --save-vtt `
+  --create-thumbnails `
+  --thumbnail-interval 3 `
+  --thumb-cols 8 `
+  --thumb-format "webp" `
+  --cdn-url "https://cdn.example.com/videos/video_with_sprites/sprites/sprite.webp" `
+  --language "vi"
+```
+
+**Kết quả**:
+
+```
+E:\Videos\
+└── video_with_sprites\
+    ├── video.mp4
+    ├── audio.wav
+    ├── movie_vi.vtt (phụ đề)
+    ├── thumbnails.vtt (tham chiếu CDN: https://cdn.example.com/videos/video_with_sprites/sprites/sprite.webp)
+    └── thumbnails\
+        └── sprite.webp
+```
+
+---
+
+### Ví dụ 6: Chỉ tạo sprite sheets (không lưu video/audio)
+
+```powershell
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --output-dir "E:\Sprites" `
+  --group-name "video_sprites" `
+  --create-thumbnails `
+  --thumbnail-interval 10 `
+  --thumb-width 120 `
+  --thumb-height 68 `
+  --thumb-cols 12 `
+  --thumb-format "jpg"
+```
+
+**Kết quả** (chỉ giữ thumbnails):
+
+```
+E:\Sprites\
+└── video_sprites\
+    ├── thumbnails.vtt
+    └── thumbnails\
+        └── sprite.jpg
 ```
 
 ---
@@ -311,4 +487,4 @@ output-dir\
 
 Dự án này sử dụng OpenAI Whisper (Apache 2.0) và FFmpeg (LGPL).
 
-**Lần cập nhật cuối**: 27 tháng 10 năm 2025
+**Lần cập nhật cuối**: 12 tháng 11 năm 2025
