@@ -10,6 +10,18 @@ import time
 import torch
 import json
 from typing import List
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn, TimeElapsedColumn
+from rich.text import Text
+from rich import box
+from rich.style import Style
+from rich.live import Live
+from rich.status import Status
+
+# Initialize Rich console
+console = Console()
 
 def check_ffmpeg():
     """Kiểm tra FFmpeg đã cài đặt chưa"""
@@ -17,10 +29,14 @@ def check_ffmpeg():
         subprocess.run(["ffmpeg", "-version"], 
                       capture_output=True, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("❌ LỖI: Không tìm thấy FFmpeg!")
-        print("📥 Vui lòng cài đặt FFmpeg:")
-        print("   - Windows: https://www.gyan.dev/ffmpeg/builds/")
-        print("   - Thêm vào PATH hoặc đặt trong thư mục script")
+        console.print(Panel(
+            "[bold red]LỖI:[/bold red] Không tìm thấy FFmpeg!\n\n"
+            "[yellow]Vui lòng cài đặt FFmpeg:[/yellow]\n"
+            "   • Windows: https://www.gyan.dev/ffmpeg/builds/\n"
+            "   • Thêm vào PATH hoặc đặt trong thư mục script",
+            title="[bold red]FFmpeg Not Found[/bold red]",
+            border_style="red"
+        ))
         sys.exit(1)
 
 
@@ -30,13 +46,13 @@ def check_gpu():
         if torch.cuda.is_available():
             gpu_name = torch.cuda.get_device_name(0)
             gpu_count = torch.cuda.device_count()
-            print(f"✅ GPU được phát hiện: {gpu_name} (x{gpu_count})")
+            console.print(f"[bold green]GPU được phát hiện:[/bold green] [cyan]{gpu_name}[/cyan] [yellow](x{gpu_count})[/yellow]")
             return True
         else:
-            print("⚠️  Không tìm thấy GPU, sẽ dùng CPU (chậm hơn)")
+            console.print("[yellow]Không tìm thấy GPU, sẽ dùng CPU (chậm hơn)[/yellow]")
             return False
     except Exception as e:
-        print(f"⚠️  Lỗi kiểm tra GPU: {e}")
+        console.print(f"[yellow]Lỗi kiểm tra GPU:[/yellow] [red]{e}[/red]")
         return False
 
 
@@ -99,13 +115,8 @@ def validate_url(url: str) -> bool:
     return url.startswith(("http://", "https://")) and ".m3u8" in url.lower()
 
 def download_from_m3u8(m3u8_url: str, output_path: str = "video.mp4") -> str:
-    print("⬇️  Đang tải video từ m3u8...")
+    console.print("\n[bold cyan]Đang tải video từ m3u8...[/bold cyan]")
     try:
-        # Bỏ qua probe - chỉ tải trực tiếp (probe thường bị hang với m3u8 từ xa)
-        # Thay vào đó, ta sẽ lấy duration từ output của tải xuống
-        print("   Bắt đầu tải...")
-        
-        # Now download with progress - bỏ -progress để tránh hang
         cmd = [
             "ffmpeg", "-y",
             "-i", m3u8_url,
@@ -119,8 +130,6 @@ def download_from_m3u8(m3u8_url: str, output_path: str = "video.mp4") -> str:
         last_time = 0
         duration = 0
         duration_found = False
-        spinner = Spinner("   Đang tải...")
-        spinner.start()
         
         # Thread để đọc stderr và tìm duration
         def read_stderr():
@@ -133,9 +142,6 @@ def download_from_m3u8(m3u8_url: str, output_path: str = "video.mp4") -> str:
                             h, m, s = time_str.split(":")
                             duration = int(h) * 3600 + int(m) * 60 + float(s)
                             duration_found = True
-                            spinner.stop()
-                            print(f"   Độ dài video: {int(duration)}s")
-                            spinner.start()
                         except:
                             pass
             except:
@@ -144,36 +150,43 @@ def download_from_m3u8(m3u8_url: str, output_path: str = "video.mp4") -> str:
         stderr_thread = threading.Thread(target=read_stderr, daemon=True)
         stderr_thread.start()
         
-        try:
-            while True:
-                line = process.stdout.readline()
-                if not line:
-                    break
-                
-                line = line.strip()
-                
-                # Parse progress output: out_time_ms=123456
-                if line.startswith("out_time_ms="):
-                    try:
-                        time_ms = int(line.split("=")[1])
-                        current_time = time_ms / 1_000_000  # Convert to seconds
-                        
-                        if current_time > last_time and duration_found:
-                            last_time = current_time
-                            spinner.stop()
-                            if duration > 0:
-                                # Show progress bar with %
-                                print_progress(int(current_time), int(duration), prefix='Tải video')
-                            else:
-                                # Just show time if duration unknown
-                                mins = int(current_time // 60)
-                                secs = current_time % 60
-                                print(f"\r⬇️  Tải video: {mins:02d}:{secs:06.3f}", end='', flush=True)
-                            spinner.start()
-                    except:
-                        pass
-        finally:
-            spinner.stop()
+        # Sử dụng Rich Progress
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(complete_style="cyan", finished_style="green"),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            console=console
+        ) as progress:
+            task = progress.add_task("Đang tải video...", total=100)
+            
+            try:
+                while True:
+                    line = process.stdout.readline()
+                    if not line:
+                        break
+                    
+                    line = line.strip()
+                    
+                    if line.startswith("out_time_ms="):
+                        try:
+                            time_ms = int(line.split("=")[1])
+                            current_time = time_ms / 1_000_000
+                            
+                            if current_time > last_time:
+                                last_time = current_time
+                                
+                                if duration_found and duration > 0:
+                                    percent = (current_time / duration) * 100
+                                    progress.update(task, completed=percent, description=f"Đang tải video ({int(current_time)}s / {int(duration)}s)")
+                                elif duration_found:
+                                    progress.update(task, description=f"Đã phát hiện video ({int(duration)}s)")
+                        except:
+                            pass
+            except KeyboardInterrupt:
+                progress.stop()
+                raise
         
         return_code = process.wait()
         stderr_thread.join(timeout=1)
@@ -182,21 +195,34 @@ def download_from_m3u8(m3u8_url: str, output_path: str = "video.mp4") -> str:
             stderr_output = process.stderr.read() if process.stderr else ""
             raise subprocess.CalledProcessError(return_code, cmd, stderr=stderr_output)
         
-        print(f"✅ Tải video thành công")
+        console.print(f"[bold green]✓ Tải video thành công[/bold green]")
         return output_path
+    except KeyboardInterrupt:
+        console.print("\n[yellow]⚠ Đã hủy tải video bởi người dùng[/yellow]")
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+                console.print("[dim]Đã xóa file tạm[/dim]")
+            except:
+                pass
+        sys.exit(0)
     except subprocess.CalledProcessError as e:
-        print(f"\n❌ LỖI: Không thể tải video từ URL: {m3u8_url}")
-        print(f"💡 Gợi ý: Kiểm tra URL m3u8 và kết nối internet")
-        if hasattr(e, 'stderr') and e.stderr:
-            print(f"Chi tiết: {str(e.stderr)[:200]}")
+        console.print(Panel(
+            f"[bold red]LỖI:[/bold red] Không thể tải video từ URL\n"
+            f"[dim]{m3u8_url}[/dim]\n\n"
+            f"[yellow]Gợi ý:[/yellow] Kiểm tra URL m3u8 và kết nối internet"
+            + (f"\n\n[red]Chi tiết:[/red] {str(e.stderr)[:200]}" if hasattr(e, 'stderr') and e.stderr else ""),
+            title="[bold red]Download Error[/bold red]",
+            border_style="red"
+        ))
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ LỖI: {str(e)}")
+        console.print(f"\n[bold red]❌ LỖI:[/bold red] [red]{str(e)}[/red]")
         sys.exit(1)
 
 
 def extract_audio(video_path: str, audio_path: str = "audio.wav") -> str:
-    print("🎧  Đang tách audio...")
+    console.print("\n[bold magenta]Đang tách audio...[/bold magenta]")
     try:
         # Get duration từ video info
         probe_cmd = [
@@ -216,10 +242,10 @@ def extract_audio(video_path: str, audio_path: str = "audio.wav") -> str:
                     duration = int(h) * 3600 + int(m) * 60 + float(s)
                     break
         except subprocess.TimeoutExpired:
-            print("   ⚠️  Timeout khi lấy duration, sẽ hiển thị tiến độ theo thời gian")
+            console.print("   [yellow]Timeout khi lấy duration, sẽ hiển thị tiến độ theo thời gian[/yellow]")
             duration = 0
         except Exception as e:
-            print(f"   ⚠️  Lỗi nhỏ khi probe: {e}")
+            console.print(f"   [yellow]Lỗi nhỏ khi probe:[/yellow] [red]{e}[/red]")
             duration = 0
         
         # Extract audio with progress
@@ -231,42 +257,47 @@ def extract_audio(video_path: str, audio_path: str = "audio.wav") -> str:
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
                                    text=True, bufsize=1)
         
-        spinner = Spinner("   Tách audio...")
-        spinner.start()
-        
         last_time = 0
-        try:
-            while True:
-                line = process.stdout.readline()
-                if not line:
-                    break
-                
-                line = line.strip()
-                
-                # Parse progress output: out_time_ms=123456
-                if line.startswith("out_time_ms="):
-                    try:
-                        time_ms = int(line.split("=")[1])
-                        current_time = time_ms / 1_000_000  # Convert to seconds
-                        
-                        if current_time > last_time:
-                            last_time = current_time
-                            spinner.stop()
-                            
-                            if duration > 0:
-                                print_progress(int(current_time), int(duration), prefix='Tách audio')
-                            else:
-                                mins = int(current_time // 60)
-                                secs = current_time % 60
-                                print(f"\r🎧  Tách audio: {mins:02d}:{secs:06.3f}", end='', flush=True)
-                            
-                            spinner.start()
-                    except:
-                        pass
-        finally:
-            spinner.stop()
         
-        return_code = process.wait(timeout=300)  # 5 min timeout
+        # Sử dụng Rich Progress
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold magenta]{task.description}"),
+            BarColumn(complete_style="magenta", finished_style="green"),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            console=console
+        ) as progress:
+            task = progress.add_task("Đang tách audio...", total=100)
+            
+            try:
+                while True:
+                    line = process.stdout.readline()
+                    if not line:
+                        break
+                    
+                    line = line.strip()
+                    
+                    if line.startswith("out_time_ms="):
+                        try:
+                            time_ms = int(line.split("=")[1])
+                            current_time = time_ms / 1_000_000
+                            
+                            if current_time > last_time:
+                                last_time = current_time
+                                
+                                if duration > 0:
+                                    percent = (current_time / duration) * 100
+                                    progress.update(task, completed=percent, description=f"Đang tách audio ({int(current_time)}s / {int(duration)}s)")
+                                else:
+                                    progress.update(task, description=f"Đang tách audio ({int(current_time)}s)")
+                        except:
+                            pass
+            except KeyboardInterrupt:
+                progress.stop()
+                raise
+        
+        return_code = process.wait(timeout=300)
         
         if return_code != 0:
             try:
@@ -275,17 +306,34 @@ def extract_audio(video_path: str, audio_path: str = "audio.wav") -> str:
                 stderr = ""
             raise subprocess.CalledProcessError(return_code, cmd, stderr=stderr)
         
-        print(f"✅ Tách audio thành công")
+        console.print(f"[bold green]✓ Tách audio thành công[/bold green]")
         return audio_path
+    except KeyboardInterrupt:
+        console.print("\n[yellow]⚠ Đã hủy tách audio bởi người dùng[/yellow]")
+        if os.path.exists(audio_path):
+            try:
+                os.remove(audio_path)
+                console.print("[dim]Đã xóa file tạm[/dim]")
+            except:
+                pass
+        sys.exit(0)
     except subprocess.TimeoutExpired:
-        print(f"\n❌ LỖI: Timeout khi tách audio (quá 5 phút)")
+        console.print(Panel(
+            "[bold red]LỖI:[/bold red] Timeout khi tách audio (quá 5 phút)",
+            title="[bold red]Timeout Error[/bold red]",
+            border_style="red"
+        ))
         sys.exit(1)
     except subprocess.CalledProcessError as e:
-        print(f"\n❌ LỖI: Không thể tách audio từ video")
-        print(f"💡 Gợi ý: Kiểm tra file video có lỗi không")
+        console.print(Panel(
+            "[bold red]LỖI:[/bold red] Không thể tách audio từ video\n\n"
+            "[yellow]Gợi ý:[/yellow] Kiểm tra file video có lỗi không",
+            title="[bold red]Audio Extraction Error[/bold red]",
+            border_style="red"
+        ))
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ LỖI: {str(e)}")
+        console.print(f"\n[bold red]❌ LỖI:[/bold red] [red]{str(e)}[/red]")
         sys.exit(1)
 
 
@@ -312,91 +360,106 @@ def result_to_vtt(result: dict) -> str:
     return "\n".join(lines)
 
 
-def print_progress(current: int, total: int, prefix: str = '', bar_length: int = 40) -> None:
-    """In-place progress bar for console.
 
-    Args:
-        current: current completed count
-        total: total count
-        prefix: optional prefix message
-        bar_length: length of progress bar in characters
+
+
+def display_menu():
+    """Hiển thị menu chính với Rich styling"""
+    console = Console()
+    
+    # ASCII Art Logo với gradient màu
+    logo = Text()
+    logo_text = r"""
+██╗      ██████╗ ██╗  ██╗ ██████╗ ██╗  ██╗ ██████╗  ██████╗ ██████╗ ██████╗ ██████╗ ███████╗
+╚██╗     ██╔══██╗██║  ██║██╔═══██╗██║  ██║██╔═══██╗██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝
+ ╚██╗    ██████╔╝███████║██║   ██║███████║██║   ██║██║     ██║     ██║   ██║██║  ██║█████╗  
+ ██╔╝    ██╔═══╝ ██╔══██║██║   ██║██╔══██║██║   ██║██║     ██║     ██║   ██║██║  ██║██╔══╝  
+██╔╝     ██║     ██║  ██║╚██████╔╝██║  ██║╚██████╔╝╚██████╗╚██████╗╚██████╔╝██████╔╝███████╗
+╚═╝      ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝
     """
-    if total <= 0:
-        return
-    percent = float(current) / float(total)
-    filled = int(bar_length * percent)
-    # use ASCII-safe characters to avoid encoding issues on Windows consoles
-    bar = '=' * filled + '-' * (bar_length - filled)
-    # \r to overwrite the same line
-    try:
-        print(f"\r{prefix} |{bar}| {current}/{total} ({percent*100:5.1f}%)", end='', flush=True)
-    except UnicodeEncodeError:
-        # fallback without special formatting
-        print(f"\r{prefix} [{current}/{total}] {percent*100:5.1f}%", end='', flush=True)
-    if current >= total:
-        print()
 
 
-class Spinner:
-    """Simple spinner to show activity for long-running subprocesses."""
-    def __init__(self, message: str = ''):
-        self._running = False
-        self._thread = None
-        self.message = message
-
-    def _spin(self):
-        chars = ['|', '/', '-', '\\']
-        idx = 0
-        while self._running:
-            print(f"\r{self.message} {chars[idx % len(chars)]}", end='', flush=True)
-            idx += 1
-            time.sleep(0.12)
-        # clear line after stop
-        print('\r' + ' ' * (len(self.message) + 4) + '\r', end='', flush=True)
-
-    def start(self):
-        if self._running:
-            return
-        self._running = True
-        self._thread = threading.Thread(target=self._spin, daemon=True)
-        self._thread.start()
-
-    def stop(self):
-        if not self._running:
-            return
-        self._running = False
-        if self._thread:
-            self._thread.join()
-
+    
+    # Tạo gradient từ cyan sang magenta
+    lines = logo_text.strip().split('\n')
+    for i, line in enumerate(lines):
+        # Tạo màu gradient từ cyan -> blue -> magenta
+        color_progress = i / (len(lines) - 1)
+        if color_progress < 0.5:
+            color = f"rgb({int(0 + color_progress * 2 * 100)},{int(255 - color_progress * 2 * 100)},{255})"
+        else:
+            progress = (color_progress - 0.5) * 2
+            color = f"rgb({int(100 + progress * 155)},{int(155 - progress * 155)},{255})"
+        logo.append(line + "\n", style=color)
+    
+    console.print(logo)
+    
+    # Subtitle
+    subtitle = Text("WHISPER M3U8 TRANSCRIBER BY PHOHOCCODE", style="bold bright_white")
+    console.print(Panel(subtitle, box=box.DOUBLE, border_style="bright_cyan"))
+    
+    console.print()
 
 def transcribe_audio(audio_path: str, model_name: str = "small", lang: Optional[str] = None, task: str = "transcribe", use_gpu: bool = True) -> dict:
-    print("🧠  Đang nhận dạng giọng nói bằng Whisper...")
+    console.print("\n[bold blue]Đang nhận dạng giọng nói bằng Whisper...[/bold blue]")
     try:
         # Xác định device
         device = "cuda" if use_gpu and torch.cuda.is_available() else "cpu"
-        print(f"   📱 Dùng: {device.upper()}")
+        device_color = "green" if device == "cuda" else "yellow"
+        console.print(f"   [bold]Dùng:[/bold] [{device_color}]{device.upper()}[/{device_color}]")
         
         # Load model với device
         model = whisper.load_model(model_name, device=device)
         
-        kwargs = {"task": task, "verbose": True}
+        # Cấu hình transcribe với các tham số tối ưu
+        kwargs = {
+            "task": task,
+            "verbose": True,
+            "fp16": device == "cuda",  # Sử dụng FP16 nếu có GPU
+            "condition_on_previous_text": True,  # Cải thiện độ chính xác
+            "temperature": 0,  # Giảm randomness, tăng độ chính xác
+            "compression_ratio_threshold": 2.4,  # Phát hiện lỗi tốt hơn
+            "logprob_threshold": -1.0,  # Lọc kết quả không chắc chắn
+            "no_speech_threshold": 0.6,  # Tăng ngưỡng để lọc nhạc/noise
+        }
+        
+        # Nếu chỉ định ngôn ngữ, bắt buộc sử dụng ngôn ngữ đó
         if lang:
             kwargs["language"] = lang
+            console.print(f"   [cyan]Ngôn ngữ:[/cyan] [yellow]{lang}[/yellow]")
+        else:
+            console.print(f"   [yellow]Tự động nhận diện ngôn ngữ[/yellow]")
         
         result = model.transcribe(audio_path, **kwargs)
+        
+        # Kiểm tra nếu kết quả có vấn đề
+        if result.get("language") == "music" or not result.get("text", "").strip():
+            console.print("\n[yellow]⚠ Cảnh báo: Whisper phát hiện chủ yếu là nhạc/noise![/yellow]")
+            if lang is None:
+                console.print("   [yellow]💡 Gợi ý: Hãy chỉ định rõ ngôn ngữ để cải thiện kết quả[/yellow]")
+        else:
+            console.print(f"\n[bold green]✓ Nhận dạng hoàn tất[/bold green] [dim]({len(result.get('segments', []))} đoạn)[/dim]")
+        
         return result
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Đã hủy nhận dạng giọng nói bởi người dùng[/yellow]")
+        sys.exit(0)
     except Exception as e:
-        print(f"\n❌ LỖI: Không thể nhận dạng giọng nói")
-        print(f"Chi tiết: {e}")
+        console.print(Panel(
+            f"[bold red]LỖI:[/bold red] Không thể nhận dạng giọng nói\n\n"
+            f"[red]Chi tiết:[/red] {e}",
+            title="[bold red]Transcription Error[/bold red]",
+            border_style="red"
+        ))
         sys.exit(1)
 
 
 def save_subtitles(result: dict, output_vtt: str = "subtitle.vtt") -> None:
-    print("💾  Đang lưu phụ đề...")
-    vtt_text = result_to_vtt(result)
-    with open(output_vtt, "w", encoding="utf-8") as f:
-        f.write(vtt_text)
-    print(f"✅  Đã tạo xong: {output_vtt}")
+    with console.status("[bold yellow]Đang lưu phụ đề...", spinner="dots"):
+        vtt_text = result_to_vtt(result)
+        with open(output_vtt, "w", encoding="utf-8") as f:
+            f.write(vtt_text)
+    console.print(f"[bold green]✓ Đã lưu phụ đề:[/bold green] [cyan]{output_vtt}[/cyan]")
 
 
 def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5, thumb_width: int = 160, thumb_height: int = 90, cols: int = 10, image_format: str = "webp") -> dict:
@@ -415,7 +478,7 @@ def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5, thum
     Returns:
         Dict chứa thông tin sprite sheet và timestamps
     """
-    print(f"🖼️  Đang tạo sprite sheet (mỗi {interval}s, định dạng: {image_format.upper()})...")
+    console.print(f"\n[bold cyan]Đang tạo sprite sheet[/bold cyan] [dim](mỗi {interval}s, định dạng: {image_format.upper()})[/dim]")
     
     # Tạo thư mục thumbnails
     thumb_dir = os.path.join(output_dir, "thumbnails")
@@ -440,50 +503,55 @@ def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5, thum
                 break
         
         if duration == 0:
-            print("⚠️  Không thể xác định độ dài video")
+            console.print("[yellow]Không thể xác định độ dài video[/yellow]")
             return {}
         
-        print(f"📊  Độ dài video: {int(duration)}s")
+        console.print(f"[green]Độ dài video:[/green] [yellow]{int(duration)}s[/yellow]")
         
         # Tính số thumbnails cần tạo
         timestamps = list(range(0, int(duration), interval))
         thumb_count = len(timestamps)
         
         if thumb_count == 0:
-            print("⚠️  Không có thumbnail nào để tạo")
+            console.print("[yellow]Không có thumbnail nào để tạo[/yellow]")
             return {}
         
-        print(f"📊  Số thumbnails: {thumb_count}")
+        console.print(f"[green]Số thumbnails:[/green] [yellow]{thumb_count}[/yellow]")
         
         # Tạo các thumbnail riêng lẻ trước (tạm thời)
         temp_thumbs = []
         temp_dir = os.path.join(thumb_dir, "temp")
         os.makedirs(temp_dir, exist_ok=True)
 
-        # Show progress while extracting individual thumbnails
-        print(f"📊  Tạo {thumb_count} thumbnails... (mỗi {interval}s)")
-        print_progress(0, thumb_count, prefix='Tạo thumbnails')
+        # Sử dụng Rich Progress
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold cyan]{task.description}"),
+            BarColumn(complete_style="cyan", finished_style="green"),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TextColumn("({task.completed}/{task.total})"),
+            TimeElapsedColumn(),
+            console=console
+        ) as progress:
+            task = progress.add_task(f"Tạo thumbnails (mỗi {interval}s)", total=thumb_count)
+            
+            for i, timestamp in enumerate(timestamps):
+                thumb_filename = f"thumb{i:04d}.jpg"
+                thumb_path = os.path.join(temp_dir, thumb_filename)
 
-        for i, timestamp in enumerate(timestamps):
-            thumb_filename = f"thumb{i:04d}.jpg"
-            thumb_path = os.path.join(temp_dir, thumb_filename)
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-ss", str(timestamp),
+                    "-i", video_path,
+                    "-vframes", "1",
+                    "-vf", f"scale={thumb_width}:{thumb_height}",
+                    "-q:v", "2",
+                    thumb_path
+                ]
 
-            cmd = [
-                "ffmpeg", "-y",
-                "-ss", str(timestamp),
-                "-i", video_path,
-                "-vframes", "1",
-                "-vf", f"scale={thumb_width}:{thumb_height}",
-                "-q:v", "2",
-                thumb_path
-            ]
-
-            subprocess.run(cmd, capture_output=True, check=True)
-            temp_thumbs.append(thumb_path)
-            # Update console progress
-            print_progress(i + 1, thumb_count, prefix='Tạo thumbnails')
-
-        print(f"✅  Đã tạo {len(temp_thumbs)} thumbnails tạm")
+                subprocess.run(cmd, capture_output=True, check=True)
+                temp_thumbs.append(thumb_path)
+                progress.update(task, advance=1)
         
         # Tạo sprite sheet từ các thumbnails
         rows = (thumb_count + cols - 1) // cols  # Làm tròn lên
@@ -508,18 +576,14 @@ def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5, thum
         
         cmd.append(sprite_path)
         
-        # Run sprite creation with a spinner to indicate activity (can take time)
-        spinner = Spinner(f"🎨  Ghép sprite sheet ({sprite_width}x{sprite_height})...")
-        spinner.start()
-        try:
+        # Sử dụng Rich Status cho sprite creation
+        with console.status(f"[bold cyan]Đang ghép sprite sheet ({sprite_width}x{sprite_height})...", spinner="dots"):
             subprocess.run(cmd, capture_output=True, check=True)
-        finally:
-            spinner.stop()
 
-        print(f"✅  Đã tạo sprite sheet: {sprite_filename}")
+        console.print(f"[bold green]✓ Đã tạo sprite sheet:[/bold green] [cyan]{sprite_filename}[/cyan]")
         
         # Xóa các thumbnails tạm
-        print("🧹  Đang xóa thumbnails tạm...")
+        console.print("[dim]Đang xóa thumbnails tạm...[/dim]")
         for thumb in temp_thumbs:
             if os.path.exists(thumb):
                 os.remove(thumb)
@@ -541,13 +605,29 @@ def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5, thum
             "total_thumbs": thumb_count
         }
         
-        print(f"✅  Sprite sheet: {cols} cột x {rows} hàng = {thumb_count} thumbnails")
+        console.print(f"[green]Sprite sheet:[/green] [yellow]{cols} cột x {rows} hàng = {thumb_count} thumbnails[/yellow]")
         
         return sprite_info
         
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Đã hủy tạo sprite sheet bởi người dùng[/yellow]")
+        # Cleanup temp files
+        console.print("[dim]Đang dọn dẹp...[/dim]")
+        for thumb in temp_thumbs:
+            if os.path.exists(thumb):
+                try:
+                    os.remove(thumb)
+                except:
+                    pass
+        if os.path.exists(temp_dir):
+            try:
+                os.rmdir(temp_dir)
+            except:
+                pass
+        return {}
     except subprocess.CalledProcessError as e:
-        print(f"❌ LỖI: Không thể tạo sprite sheet")
-        print(f"Chi tiết: {e}")
+        console.print(f"[bold red]LỖI:[/bold red] [red]Không thể tạo sprite sheet[/red]")
+        console.print(f"[red]Chi tiết: {e}[/red]")
         return {}
 
 
@@ -562,10 +642,8 @@ def create_thumbnail_vtt(sprite_info: dict, output_vtt: str, interval: int = 5, 
         cdn_url: URL CDN cho sprite sheet (nếu có), ví dụ: https://cdn.example.com/thumbs/sprite.jpg
                  Nếu None, sẽ dùng đường dẫn tương đối
     """
-    print("💾  Đang tạo file VTT cho sprite sheet...")
-    
     if not sprite_info:
-        print("⚠️  Không có thông tin sprite sheet")
+        console.print("[yellow]⚠ Không có thông tin sprite sheet[/yellow]")
         return
     
     lines = ["WEBVTT", ""]
@@ -607,13 +685,22 @@ def create_thumbnail_vtt(sprite_info: dict, output_vtt: str, interval: int = 5, 
         lines.append(f"{sprite_url}{xywh}")
         lines.append("")
     
-    with open(output_vtt, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+    with console.status("[bold yellow]Đang lưu file VTT...", spinner="dots"):
+        with open(output_vtt, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
     
-    print(f"✅  Đã tạo file VTT sprite sheet: {output_vtt}")
-    print(f"ℹ️   Sprite URL: {sprite_url}")
+    console.print(f"[bold green]✓ Đã tạo file VTT sprite sheet:[/bold green] [cyan]{output_vtt}[/cyan]")
+    console.print(f"   [blue]Sprite URL:[/blue] [dim]{sprite_url}[/dim]")
 
 def main() -> None:
+    try:
+        display_menu()
+        _main()
+    except KeyboardInterrupt:
+        console.print("\n\n[bold yellow]Bạn đã thoát chương trình[/bold yellow]")
+        sys.exit(0)
+
+def _main() -> None:
     parser = argparse.ArgumentParser(description="Tải video từ m3u8, tách audio và nhận dạng giọng nói bằng Whisper")
     parser.add_argument("--m3u8", help="URL đến playlist m3u8 (nếu bỏ qua, bạn sẽ được nhắc)")
     parser.add_argument("-l", "--language", help="Mã ngôn ngữ để truyền cho Whisper (ví dụ: 'vi', 'en'). Nếu bỏ qua, bạn sẽ được nhắc.")
@@ -645,84 +732,103 @@ def main() -> None:
     m3u8_link = args.m3u8
     while True:
         if not m3u8_link:
-            m3u8_link = input("🔗 Nhập link .m3u8: ").strip()
+            m3u8_link = console.input("[bold cyan]Nhập link .m3u8:[/bold cyan] ").strip()
         
         if validate_url(m3u8_link):
             break
         else:
-            print("❌ URL không hợp lệ! URL phải:")
-            print("   - Bắt đầu bằng http:// hoặc https://")
-            print("   - Chứa đuôi .m3u8")
-            print("   Ví dụ: https://example.com/video/index.m3u8\n")
+            console.print(Panel(
+                "[bold red]URL không hợp lệ![/bold red]\n\n"
+                "URL phải:\n"
+                "   • Bắt đầu bằng [cyan]http://[/cyan] hoặc [cyan]https://[/cyan]\n"
+                "   • Chứa đuôi [cyan].m3u8[/cyan]\n\n"
+                "[yellow]Ví dụ:[/yellow] [dim]https://example.com/video/index.m3u8[/dim]",
+                title="[bold red]Invalid URL[/bold red]",
+                border_style="red"
+            ))
             m3u8_link = None
 
     # Chọn thư mục lưu trữ
     output_dir = args.output_dir
     if not output_dir:
         recent = load_recent_paths()
-        print("\n📂 Chọn nơi lưu trữ:")
-        print("1. Thư mục hiện tại")
+        console.print("\n[bold cyan]Chọn nơi lưu trữ:[/bold cyan]")
+        console.print("[yellow]1.[/yellow] Thư mục hiện tại")
         if recent:
-            print("2. Chọn từ các đường dẫn đã dùng trước (gợi ý)")
-            print("3. Nhập đường dẫn tùy chỉnh")
-            dir_choice = input("👉 Chọn (1-3): ").strip()
+            console.print("[yellow]2.[/yellow] Chọn từ các đường dẫn đã dùng trước (gợi ý)")
+            console.print("[yellow]3.[/yellow] Nhập đường dẫn tùy chỉnh")
+            dir_choice = console.input("[bold green]Chọn (1-3):[/bold green] ").strip()
         else:
-            print("2. Nhập đường dẫn tùy chỉnh")
-            dir_choice = input("👉 Chọn (1-2): ").strip()
+            console.print("[yellow]2.[/yellow] Nhập đường dẫn tùy chỉnh")
+            dir_choice = console.input("[bold green]Chọn (1-2):[/bold green] ").strip()
 
         if dir_choice == "1":
             output_dir = os.getcwd()
-            print(f"✅ Sẽ lưu vào thư mục hiện tại: {output_dir}")
+            console.print(f"[green]Sẽ lưu vào thư mục hiện tại:[/green] [cyan]{output_dir}[/cyan]")
             add_recent_path(output_dir)
 
         elif dir_choice == "2" and recent:
             # show recent list
-            print("\n📁 Đường dẫn đã dùng trước:")
+            table = Table(title="[bold cyan]Đường dẫn đã dùng trước[/bold cyan]", box=box.ROUNDED)
+            table.add_column("#", style="yellow", justify="center")
+            table.add_column("Đường dẫn", style="cyan")
+            
             for i, p in enumerate(recent, start=1):
-                print(f"  {i}. {p}")
-            print(f"  {len(recent)+1}. Nhập đường dẫn mới")
-            sel = input(f"👉 Chọn (1-{len(recent)+1}): ").strip()
+                table.add_row(str(i), p)
+            table.add_row(str(len(recent)+1), "[yellow]Nhập đường dẫn mới[/yellow]")
+            
+            console.print(table)
+            sel = console.input(f"[bold green]Chọn (1-{len(recent)+1}):[/bold green] ").strip()
             try:
                 idx = int(sel)
                 if 1 <= idx <= len(recent):
                     output_dir = recent[idx-1]
-                    print(f"✅ Chọn: {output_dir}")
+                    console.print(f"[green]Chọn:[/green] [cyan]{output_dir}[/cyan]")
                     # Ensure exists or ask to create
                     try:
                         os.makedirs(output_dir, exist_ok=True)
                     except Exception:
-                        print("⚠️  Không thể tạo hoặc truy cập thư mục đã chọn")
+                        console.print("[yellow]Không thể tạo hoặc truy cập thư mục đã chọn[/yellow]")
                     add_recent_path(output_dir)
-                else:
-                    # fallthrough to custom input
+                elif idx == len(recent) + 1:
+                    # User wants to enter custom path
                     output_dir = None
+                else:
+                    # Invalid choice, use current directory
+                    output_dir = os.getcwd()
+                    console.print(f"[yellow]Lựa chọn không hợp lệ, dùng thư mục hiện tại:[/yellow] [cyan]{output_dir}[/cyan]")
+                    add_recent_path(output_dir)
             except ValueError:
-                output_dir = None
+                # Invalid input, use current directory
+                output_dir = os.getcwd()
+                console.print(f"[yellow]Lựa chọn không hợp lệ, dùng thư mục hiện tại:[/yellow] [cyan]{output_dir}[/cyan]")
+                add_recent_path(output_dir)
 
-        else:
+        # If output_dir is still None, ask for custom path
+        if output_dir is None:
             # custom path input (either choice 2 when no recent, or explicit 3, or fallback)
             while True:
-                output_dir = input("💾 Nhập đường dẫn thư mục (ví dụ: E:\\Videos\\Subtitles): ").strip()
+                output_dir = console.input("[bold cyan]Nhập đường dẫn thư mục[/bold cyan] [dim](ví dụ: E:\\Videos\\Subtitles)[/dim]: ").strip()
                 # Xóa dấu ngoặc kép nếu user copy-paste từ Windows Explorer
                 output_dir = output_dir.strip('"').strip("'")
                 # Tạo thư mục nếu chưa tồn tại
                 try:
                     os.makedirs(output_dir, exist_ok=True)
-                    print(f"✅ Sẽ lưu vào: {output_dir}")
+                    console.print(f"[green]Sẽ lưu vào:[/green] [cyan]{output_dir}[/cyan]")
                     add_recent_path(output_dir)
                     break
                 except Exception as e:
-                    print(f"❌ Đường dẫn không hợp lệ: {e}")
-                    print("Vui lòng nhập lại!\n")
+                    console.print(f"[red]Đường dẫn không hợp lệ:[/red] {e}")
+                    console.print("[yellow]Vui lòng nhập lại![/yellow]\n")
     else:
         # Tạo thư mục nếu được truyền qua CLI
         try:
             os.makedirs(output_dir, exist_ok=True)
-            print(f"✅ Sẽ lưu vào: {output_dir}")
+            console.print(f"[green]Sẽ lưu vào:[/green] [cyan]{output_dir}[/cyan]")
             add_recent_path(output_dir)
         except Exception as e:
-            print(f"❌ Không thể tạo thư mục đầu ra đã truyền: {e}")
-            print("Sẽ dùng thư mục hiện tại thay thế.")
+            console.print(f"[red]Không thể tạo thư mục đầu ra đã truyền:[/red] {e}")
+            console.print("[yellow]Sẽ dùng thư mục hiện tại thay thế.[/yellow]")
             output_dir = os.getcwd()
             add_recent_path(output_dir)
 
@@ -731,9 +837,9 @@ def main() -> None:
     group_dir = None
     # Nếu chưa truyền --group-name, hỏi người dùng
     if not group_name:
-        choose_group = input("\n📦 Bạn có muốn nhóm 3 file (video/audio/vtt) vào thư mục mới không? (y/N): ").strip().lower()
+        choose_group = console.input("\n[bold cyan]Bạn có muốn nhóm 3 file (video/audio/vtt) vào thư mục mới không?[/bold cyan] [dim](y/N)[/dim]: ").strip().lower()
         if choose_group == "y":
-            group_name = input("📛 Nhập tên thư mục nhóm (để trống sẽ dùng tên theo thời điểm): ").strip()
+            group_name = console.input("[bold cyan]Nhập tên thư mục nhóm[/bold cyan] [dim](để trống sẽ dùng tên theo thời điểm)[/dim]: ").strip()
             # loại bỏ dấu ngoặc kép nếu copy-paste
             group_name = group_name.strip('"').strip("'")
             if not group_name:
@@ -743,10 +849,10 @@ def main() -> None:
         try:
             group_dir = os.path.join(output_dir, group_name)
             os.makedirs(group_dir, exist_ok=True)
-            print(f"✅ Sẽ lưu các file vào: {group_dir}")
+            console.print(f"[green]Sẽ lưu các file vào:[/green] [cyan]{group_dir}[/cyan]")
         except Exception as e:
-            print(f"❌ Không thể tạo thư mục nhóm: {e}")
-            print("Sẽ lưu vào thư mục đầu ra chính.")
+            console.print(f"[red]Không thể tạo thư mục nhóm:[/red] {e}")
+            console.print("[yellow]Sẽ lưu vào thư mục đầu ra chính.[/yellow]")
             group_dir = None
 
     # base_dir là nơi thực tế các file sẽ được ghi
@@ -763,19 +869,20 @@ def main() -> None:
         save_vtt = args.save_vtt
     else:
         # Nếu không có, hỏi người dùng qua menu
-        print("\n" + "="*50)
-        print("💾 CHỌN FILE CẦN LƯU")
-        print("="*50)
-        print("1. Video + Audio + VTT (lưu tất cả)")
-        print("2. Chỉ Video")
-        print("3. Chỉ Audio")
-        print("4. Chỉ VTT (Phụ đề)")
-        print("5. Video + Audio")
-        print("6. Video + VTT")
-        print("7. Audio + VTT")
-        print("="*50)
+        table = Table(title="[bold cyan]CHỌN FILE CẦN LƯU[/bold cyan]", box=box.DOUBLE)
+        table.add_column("#", style="yellow", justify="center")
+        table.add_column("Tùy chọn", style="green")
         
-        choice = input("👉 Nhập lựa chọn (1-7): ").strip()
+        table.add_row("1", "Video + Audio + VTT (lưu tất cả)")
+        table.add_row("2", "Chỉ Video")
+        table.add_row("3", "Chỉ Audio")
+        table.add_row("4", "Chỉ VTT (Phụ đề)")
+        table.add_row("5", "Video + Audio")
+        table.add_row("6", "Video + VTT")
+        table.add_row("7", "Audio + VTT")
+        
+        console.print("\n", table)
+        choice = console.input("[bold green]Nhập lựa chọn (1-7):[/bold green] ").strip()
         
         save_video = False
         save_audio = False
@@ -796,23 +903,23 @@ def main() -> None:
         elif choice == "7":
             save_audio = save_vtt = True
         else:
-            print("⚠️  Lựa chọn không hợp lệ, sẽ lưu tất cả file")
+            console.print("[yellow]Lựa chọn không hợp lệ, sẽ lưu tất cả file[/yellow]")
             save_video = save_audio = save_vtt = True
         
         # Hiển thị lựa chọn
         files_to_save = []
         if save_video:
-            files_to_save.append("Video")
+            files_to_save.append("[cyan]Video[/cyan]")
         if save_audio:
-            files_to_save.append("Audio")
+            files_to_save.append("[magenta]Audio[/magenta]")
         if save_vtt:
-            files_to_save.append("VTT (Phụ đề)")
+            files_to_save.append("[yellow]VTT (Phụ đề)[/yellow]")
         
         if files_to_save:
-            print(f"✅ Sẽ lưu: {', '.join(files_to_save)}")
+            console.print(f"[green]Sẽ lưu:[/green] {', '.join(files_to_save)}")
         else:
-            print("⚠️  Không có file nào được chọn để lưu!")
-            print("    (Video và Audio vẫn sẽ được tải về để xử lý, sau đó sẽ bị xóa)")
+            console.print("[yellow]Không có file nào được chọn để lưu![/yellow]")
+            console.print("[dim]    (Video và Audio vẫn sẽ được tải về để xử lý, sau đó sẽ bị xóa)[/dim]")
 
 
     # --- Tùy chọn tạo thumbnails ---
@@ -825,98 +932,102 @@ def main() -> None:
     cdn_url = args.cdn_url
     
     if not create_thumbnails:
-        create_thumb_choice = input("\n🖼️  Bạn có muốn tạo sprite sheet thumbnails từ video không? (y/N): ").strip().lower()
+        create_thumb_choice = console.input("\n[bold cyan]Bạn có muốn tạo sprite sheet thumbnails từ video không?[/bold cyan] [dim](y/N)[/dim]: ").strip().lower()
         if create_thumb_choice == "y":
             create_thumbnails = True
             
             # Hỏi khoảng thời gian
-            interval_input = input(f"⏱️  Nhập khoảng thời gian giữa các thumbnail (giây, mặc định {thumbnail_interval}): ").strip()
+            interval_input = console.input(f"[cyan]Nhập khoảng thời gian giữa các thumbnail[/cyan] [dim](giây, mặc định {thumbnail_interval})[/dim]: ").strip()
             if interval_input.isdigit() and int(interval_input) > 0:
                 thumbnail_interval = int(interval_input)
             
             # Hỏi kích thước thumbnail
-            print(f"\nℹ️  Kích thước mặc định: {thumb_width}x{thumb_height}px")
-            size_input = input("📐 Thay đổi kích thước? (Nhấn Enter để giữ mặc định hoặc nhập 'w,h' ví dụ: 160,90): ").strip()
+            console.print(f"\n[blue]Kích thước mặc định:[/blue] [yellow]{thumb_width}x{thumb_height}px[/yellow]")
+            size_input = console.input("[cyan]Thay đổi kích thước?[/cyan] [dim](Nhấn Enter để giữ mặc định hoặc nhập 'w,h' ví dụ: 160,90)[/dim]: ").strip()
             if size_input and "," in size_input:
                 try:
                     w, h = size_input.split(",")
                     thumb_width = int(w.strip())
                     thumb_height = int(h.strip())
-                    print(f"✅ Đã đặt kích thước: {thumb_width}x{thumb_height}px")
+                    console.print(f"[green]Đã đặt kích thước:[/green] [yellow]{thumb_width}x{thumb_height}px[/yellow]")
                 except:
-                    print(f"⚠️  Định dạng không hợp lệ, giữ mặc định {thumb_width}x{thumb_height}px")
+                    console.print(f"[yellow]Định dạng không hợp lệ, giữ mặc định {thumb_width}x{thumb_height}px[/yellow]")
             
             # Hỏi số cột
-            cols_input = input(f"📊 Số cột trong sprite sheet (mặc định {thumb_cols}): ").strip()
+            cols_input = console.input(f"[cyan]Số cột trong sprite sheet[/cyan] [dim](mặc định {thumb_cols})[/dim]: ").strip()
             if cols_input.isdigit() and int(cols_input) > 0:
                 thumb_cols = int(cols_input)
             
             # Hỏi định dạng ảnh
-            print(f"\n🎨 Chọn định dạng ảnh:")
-            print(f"  1. WebP (nhẹ hơn, chất lượng tốt - khuyến nghị)")
-            print(f"  2. JPG (tương thích rộng)")
-            format_choice = input(f"👉 Chọn (1-2, mặc định 1): ").strip()
+            console.print(f"\n[bold cyan]Chọn định dạng ảnh:[/bold cyan]")
+            console.print(f"  [yellow]1.[/yellow] WebP [dim](nhẹ hơn, chất lượng tốt - khuyến nghị)[/dim]")
+            console.print(f"  [yellow]2.[/yellow] JPG [dim](tương thích rộng)[/dim]")
+            format_choice = console.input(f"[bold green]Chọn (1-2, mặc định 1):[/bold green] ").strip()
             if format_choice == "2":
                 thumb_format = "jpg"
             else:
                 thumb_format = "webp"
             
             # Hỏi CDN URL (tùy chọn)
-            cdn_input = input(f"🌐 URL CDN cho sprite sheet (Nhấn Enter để bỏ qua): ").strip()
+            cdn_input = console.input(f"[cyan]URL CDN cho sprite sheet[/cyan] [dim](Nhấn Enter để bỏ qua)[/dim]: ").strip()
             if cdn_input:
                 cdn_url = cdn_input
             
-            print(f"✅ Sẽ tạo sprite sheet: {thumb_cols} cột, {thumb_width}x{thumb_height}px, {thumb_format.upper()}, mỗi {thumbnail_interval}s")
+            console.print(f"[green]Sẽ tạo sprite sheet:[/green] [yellow]{thumb_cols} cột, {thumb_width}x{thumb_height}px, {thumb_format.upper()}, mỗi {thumbnail_interval}s[/yellow]")
             if cdn_url:
-                print(f"✅ Sử dụng CDN URL: {cdn_url}")
+                console.print(f"[green]Sử dụng CDN URL:[/green] [cyan]{cdn_url}[/cyan]")
 
-    # Menu chọn ngôn ngữ (giữ nguyên như cũ)
+    # Menu chọn ngôn ngữ với Rich Table
     language = args.language
     if not language:
-        print("\n" + "="*50)
-        print("🌍  CHỌN NGÔN NGỮ NHẬN DẠNG")
-        print("="*50)
+        table = Table(title="[bold cyan]CHỌN NGÔN NGỮ NHẬN DẠNG[/bold cyan]", box=box.DOUBLE_EDGE, show_lines=False)
+        table.add_column("#", style="yellow", justify="center", width=4)
+        table.add_column("Ngôn ngữ", style="green", width=25)
+        table.add_column("Mã", style="cyan", justify="center", width=6)
+        
         languages = [
-            ("1", "🇻🇳 Tiếng Việt", "vi"),
-            ("2", "🇺🇸 Tiếng Anh", "en"),
-            ("3", "🇯🇵 Tiếng Nhật", "ja"),
-            ("4", "🇰🇷 Tiếng Hàn", "ko"),
-            ("5", "🇨🇳 Tiếng Trung", "zh"),
-            ("6", "🇹🇭 Tiếng Thái", "th"),
-            ("7", "🇮🇩 Tiếng Indonesia", "id"),
-            ("8", "🤖 Tự động nhận diện", "auto"),
-            ("0", "➕ Nhập mã khác", "custom"),
+            ("1", "Tiếng Việt", "vi"),
+            ("2", "Tiếng Anh", "en"),
+            ("3", "Tiếng Nhật", "ja"),
+            ("4", "Tiếng Hàn", "ko"),
+            ("5", "Tiếng Trung", "zh"),
+            ("6", "Tiếng Thái", "th"),
+            ("7", "Tiếng Indonesia", "id"),
+            ("8", "Tự động nhận diện", "auto"),
+            ("0", "Nhập mã khác", "custom"),
         ]
         
-        for num, name, _ in languages:
-            print(f"  {num}. {name}")
-        print("="*50)
+        for num, name, code in languages:
+            table.add_row(num, name, code if code not in ["auto", "custom"] else "")
         
-        choice = input("👉 Nhập lựa chọn của bạn: ").strip()
+        console.print("\n", table)
+        choice = console.input("[bold green]Nhập lựa chọn của bạn:[/bold green] ").strip()
         
         selected = next((lang for lang in languages if lang[0] == choice), None)
         
         if selected:
             if selected[2] == "custom":
-                language = input("💬 Nhập mã ngôn ngữ (ví dụ: fr, de, es): ").strip() or None
+                language = console.input("[cyan]Nhập mã ngôn ngữ[/cyan] [dim](ví dụ: fr, de, es)[/dim]: ").strip() or None
                 if language:
-                    print(f"✅ Đã chọn ngôn ngữ: {language}")
+                    console.print(f"[green]Đã chọn ngôn ngữ:[/green] [yellow]{language}[/yellow]")
             elif selected[2] == "auto":
                 language = None
-                print("✅ Sẽ tự động nhận diện ngôn ngữ")
+                console.print("[green]Sẽ tự động nhận diện ngôn ngữ[/green]")
             else:
                 language = selected[2]
-                print(f"✅ Đã chọn: {selected[1]}")
+                console.print(f"[green]Đã chọn:[/green] [cyan]{selected[1]}[/cyan]")
         else:
-            print("⚠️  Lựa chọn không hợp lệ, sẽ dùng auto-detect")
+            console.print("[yellow]Lựa chọn không hợp lệ, sẽ dùng auto-detect[/yellow]")
             language = None
 
-    print("\n" + "="*50)
-    print("🚀 BẮT ĐẦU XỬ LÝ")
-    print("="*50)
-    print("ℹ️  Lưu ý: Video và Audio sẽ được tải về để xử lý")
-    print("    Các file không được chọn sẽ tự động xóa sau khi hoàn tất")
-    print("="*50 + "\n")
+    console.print(Panel(
+        "[bold green]BẮT ĐẦU XỬ LÝ[/bold green]\n\n"
+        "[blue]Lưu ý:[/blue]\n"
+        "   • Video và Audio sẽ được tải về để xử lý\n"
+        "   • Các file không được chọn sẽ tự động xóa sau khi hoàn tất",
+        title="[bold cyan]Processing Started[/bold cyan]",
+        border_style="cyan"
+    ))
 
     # Tạo đường dẫn file đầy đủ (ghi vào base_dir - có thể là thư mục nhóm mới)
     video_path = os.path.join(base_dir, "video.mp4")
@@ -941,39 +1052,43 @@ def main() -> None:
             create_thumbnail_vtt(sprite_info, thumbnail_vtt_path, thumbnail_interval, cdn_url)
     
     # Dọn dẹp các file không cần thiết
-    print("\n🧹 Đang dọn dẹp...")
+    if (not save_video and os.path.exists(video_path)) or (not save_audio and os.path.exists(audio_path)):
+        console.print("\n[bold yellow]Đang dọn dẹp...[/bold yellow]")
+        
+        if not save_video and os.path.exists(video_path):
+            os.remove(video_path)
+            console.print("   [dim]🗑 Đã xóa file video tạm[/dim]")
+        
+        if not save_audio and os.path.exists(audio_path):
+            os.remove(audio_path)
+            console.print("   [dim]🗑 Đã xóa file audio tạm[/dim]")
     
-    # Xóa file video nếu người dùng không muốn lưu
-    if not save_video and os.path.exists(video_path):
-        os.remove(video_path)
-        print("   ❌ Đã xóa file video tạm")
+    # Tạo bảng tổng kết kết quả
+    table = Table(title="[bold green]✓ HOÀN TẤT![/bold green]", box=box.DOUBLE, show_header=True)
+    table.add_column("Loại", style="cyan", justify="center", width=20)
+    table.add_column("Tên file", style="yellow", width=40)
+    table.add_column("Trạng thái", style="green", justify="center", width=10)
     
-    # Xóa file audio nếu người dùng không muốn lưu
-    if not save_audio and os.path.exists(audio_path):
-        os.remove(audio_path)
-        print("   ❌ Đã xóa file audio tạm")
-    
-    print(f"\n{'='*50}")
-    print(f"✅ HOÀN TẤT!")
-    print(f"📁 Thư mục: {base_dir}")
-    
-    # Hiển thị file đã lưu
-    files_saved = []
     if save_video and os.path.exists(video_path):
-        files_saved.append(f"📹 Video: video.mp4")
+        table.add_row("Video", "video.mp4", "✓")
     if save_audio and os.path.exists(audio_path):
-        files_saved.append(f"🎵 Audio: audio.wav")
+        table.add_row("Audio", "audio.wav", "✓")
     if save_vtt and os.path.exists(vtt_path):
-        files_saved.append(f"📝 Phụ đề: {os.path.basename(vtt_path)}")
+        table.add_row("Phụ đề", os.path.basename(vtt_path), "✓")
     if sprite_info and os.path.exists(thumbnail_vtt_path):
         sprite_file = sprite_info.get("sprite_filename", "sprite.jpg")
         thumb_count = sprite_info.get("total_thumbs", 0)
-        files_saved.append(f"🖼️  Sprite sheet: {sprite_file} ({thumb_count} thumbnails) + thumbnails.vtt")
+        table.add_row("Sprite Sheet", f"{sprite_file} ({thumb_count} thumbs)", "✓")
+        table.add_row("Thumbnail VTT", "thumbnails.vtt", "✓")
     
-    for file_info in files_saved:
-        print(file_info)
-    
-    print(f"{'='*50}\n")
+    console.print("\n")
+    console.print(Panel(
+        table,
+        title=f"[bold cyan]Thư mục: {base_dir}[/bold cyan]",
+        border_style="green",
+        padding=(1, 2)
+    ))
+    console.print("")
 
 if __name__ == "__main__":
     main()
