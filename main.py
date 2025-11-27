@@ -10,6 +10,7 @@ import time
 import torch
 import json
 from typing import List
+import warnings
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -22,6 +23,9 @@ from rich.status import Status
 
 # Initialize Rich console
 console = Console()
+
+# Tắt warning về Flash Attention (không ảnh hưởng đến chức năng)
+warnings.filterwarnings("ignore", message=".*Torch was not compiled with flash attention.*")
 
 def check_ffmpeg():
     """Kiểm tra FFmpeg đã cài đặt chưa"""
@@ -224,28 +228,35 @@ def download_from_m3u8(m3u8_url: str, output_path: str = "video.mp4") -> str:
 def extract_audio(video_path: str, audio_path: str = "audio.wav") -> str:
     console.print("\n[bold magenta]Đang tách audio...[/bold magenta]")
     try:
-        # Get duration từ video info
+        # Get duration từ ffprobe (chính xác và nhanh hơn)
         probe_cmd = [
-            "ffmpeg", "-i", video_path,
-            "-f", "null", "-"
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            video_path
         ]
         
         duration = 0
         try:
-            # Timeout 10 giây cho probe
-            probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=10)
-            output = probe_result.stderr if probe_result.stderr else ""
-            for line in output.split('\n'):
-                if "Duration:" in line:
-                    time_str = line.split("Duration:")[1].split(",")[0].strip()
-                    h, m, s = time_str.split(":")
-                    duration = int(h) * 3600 + int(m) * 60 + float(s)
-                    break
+            probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=5)
+            if probe_result.returncode == 0 and probe_result.stdout.strip():
+                duration = float(probe_result.stdout.strip())
+            else:
+                # Fallback: dùng ffmpeg -i
+                probe_cmd_fallback = ["ffmpeg", "-i", video_path, "-f", "null", "-"]
+                probe_result = subprocess.run(probe_cmd_fallback, capture_output=True, text=True, timeout=5)
+                output = probe_result.stderr if probe_result.stderr else ""
+                for line in output.split('\n'):
+                    if "Duration:" in line:
+                        time_str = line.split("Duration:")[1].split(",")[0].strip()
+                        h, m, s = time_str.split(":")
+                        duration = int(h) * 3600 + int(m) * 60 + float(s)
+                        break
         except subprocess.TimeoutExpired:
-            console.print("   [yellow]Timeout khi lấy duration, sẽ hiển thị tiến độ theo thời gian[/yellow]")
+            console.print("   [yellow]Không thể lấy duration, sẽ hiển thị tiến độ ước lượng[/yellow]")
             duration = 0
         except Exception as e:
-            console.print(f"   [yellow]Lỗi nhỏ khi probe:[/yellow] [red]{e}[/red]")
+            console.print(f"   [dim]Probe error: {e}[/dim]")
             duration = 0
         
         # Extract audio with progress
@@ -259,7 +270,7 @@ def extract_audio(video_path: str, audio_path: str = "audio.wav") -> str:
         
         last_time = 0
         
-        # Sử dụng Rich Progress
+        # Sử dụng Rich Progress (giống download video)
         with Progress(
             SpinnerColumn(),
             TextColumn("[bold magenta]{task.description}"),
@@ -268,7 +279,10 @@ def extract_audio(video_path: str, audio_path: str = "audio.wav") -> str:
             TimeElapsedColumn(),
             console=console
         ) as progress:
-            task = progress.add_task("Đang tách audio...", total=100)
+            if duration > 0:
+                task = progress.add_task(f"Đang tách audio (0s / {int(duration)}s)", total=100)
+            else:
+                task = progress.add_task("Đang tách audio...", total=100)
             
             try:
                 while True:
@@ -411,23 +425,37 @@ def transcribe_audio(audio_path: str, model_name: str = "small", lang: Optional[
         # Load model với device
         model = whisper.load_model(model_name, device=device)
         
-        # Cấu hình transcribe với các tham số tối ưu
+        # Cấu hình transcribe với các tham số tối ưu chống lặp
         kwargs = {
             "task": task,
             "verbose": True,
             "fp16": device == "cuda",  # Sử dụng FP16 nếu có GPU
-            "condition_on_previous_text": True,  # Cải thiện độ chính xác
-            "temperature": 0,  # Giảm randomness, tăng độ chính xác
+            "condition_on_previous_text": False,  # Tắt để tránh lặp lại context
+            "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),  # Fallback temperatures để giảm lặp
             "compression_ratio_threshold": 2.4,  # Phát hiện lỗi tốt hơn
             "logprob_threshold": -1.0,  # Lọc kết quả không chắc chắn
             "no_speech_threshold": 0.6,  # Tăng ngưỡng để lọc nhạc/noise
+            "best_of": 5,  # Lấy kết quả tốt nhất trong 5 lần decode (giảm lặp)
+            "initial_prompt": None,  # Không dùng prompt để tránh bias sang ngôn ngữ khác
         }
         
         # Nếu chỉ định ngôn ngữ, bắt buộc sử dụng ngôn ngữ đó
         if lang:
             kwargs["language"] = lang
-            console.print(f"   [cyan]Ngôn ngữ:[/cyan] [yellow]{lang}[/yellow]")
+            # Thêm prompt để ép Whisper chỉ dịch ngôn ngữ được chọn
+            if lang == "zh":
+                kwargs["initial_prompt"] = "以下是普通话的句子。"  # Prompt tiếng Trung
+            elif lang == "vi":
+                kwargs["initial_prompt"] = "Đây là câu tiếng Việt."
+            elif lang == "en":
+                kwargs["initial_prompt"] = "The following is in English."
+            elif lang == "ja":
+                kwargs["initial_prompt"] = "以下は日本語の文章です。"
+            elif lang == "ko":
+                kwargs["initial_prompt"] = "다음은 한국어 문장입니다."
+            console.print(f"   [cyan]Ngôn ngữ:[/cyan] [yellow]{lang}[/yellow] [dim](chỉ nhận dạng ngôn ngữ này)[/dim]")
         else:
+            kwargs["initial_prompt"] = None  # Auto-detect không dùng prompt
             console.print(f"   [yellow]Tự động nhận diện ngôn ngữ[/yellow]")
         
         result = model.transcribe(audio_path, **kwargs)
@@ -606,6 +634,27 @@ def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5, thum
         }
         
         console.print(f"[green]Sprite sheet:[/green] [yellow]{cols} cột x {rows} hàng = {thumb_count} thumbnails[/yellow]")
+        
+        # Lưu thông tin sprite sheet vào file txt
+        info_txt_path = os.path.join(thumb_dir, "sprite_info.txt")
+        try:
+            with open(info_txt_path, "w", encoding="utf-8") as f:
+                f.write("=" * 60 + "\n")
+                f.write("THÔNG TIN SPRITE SHEET THUMBNAILS\n")
+                f.write("=" * 60 + "\n\n")
+                f.write(f"File sprite sheet:    {sprite_filename}\n")
+                f.write(f"Định dạng ảnh:        {image_format.upper()}\n")
+                f.write(f"Kích thước sprite:    {sprite_width} x {sprite_height} px\n")
+                f.write(f"Kích thước mỗi thumb: {thumb_width} x {thumb_height} px\n")
+                f.write(f"Số cột:               {cols}\n")
+                f.write(f"Số hàng:              {rows}\n")
+                f.write(f"Tổng số thumbnails:   {thumb_count}\n")
+                f.write(f"Khoảng thời gian:     {interval}s\n")
+                f.write(f"Đường dẫn tương đối:  {sprite_info['relative_path']}\n")
+            
+            console.print(f"[green]✓ Đã lưu thông tin sprite:[/green] [cyan]sprite_info.txt[/cyan]")
+        except Exception as e:
+            console.print(f"[yellow]⚠ Không thể lưu file thông tin: {e}[/yellow]")
         
         return sprite_info
         
