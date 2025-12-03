@@ -202,7 +202,7 @@ def download_from_m3u8(m3u8_url: str, output_path: str = "video.mp4") -> str:
         console.print(f"[bold green]✓ Tải video thành công[/bold green]")
         return output_path
     except KeyboardInterrupt:
-        console.print("\n[yellow]⚠ Đã hủy tải video bởi người dùng[/yellow]")
+        console.print("\n[yellow]Đã hủy tiến trình tải video[/yellow]")
         if os.path.exists(output_path):
             try:
                 os.remove(output_path)
@@ -221,7 +221,7 @@ def download_from_m3u8(m3u8_url: str, output_path: str = "video.mp4") -> str:
         ))
         sys.exit(1)
     except Exception as e:
-        console.print(f"\n[bold red]❌ LỖI:[/bold red] [red]{str(e)}[/red]")
+        console.print(f"\n[bold red]LỖI:[/bold red] [red]{str(e)}[/red]")
         sys.exit(1)
 
 
@@ -323,7 +323,7 @@ def extract_audio(video_path: str, audio_path: str = "audio.wav") -> str:
         console.print(f"[bold green]✓ Tách audio thành công[/bold green]")
         return audio_path
     except KeyboardInterrupt:
-        console.print("\n[yellow]⚠ Đã hủy tách audio bởi người dùng[/yellow]")
+        console.print("\n[yellow]Đã hủy tiến trình tách audio[/yellow]")
         if os.path.exists(audio_path):
             try:
                 os.remove(audio_path)
@@ -347,7 +347,7 @@ def extract_audio(video_path: str, audio_path: str = "audio.wav") -> str:
         ))
         sys.exit(1)
     except Exception as e:
-        console.print(f"\n[bold red]❌ LỖI:[/bold red] [red]{str(e)}[/red]")
+        console.print(f"\n[bold red]LỖI:[/bold red] [red]{str(e)}[/red]")
         sys.exit(1)
 
 
@@ -462,7 +462,7 @@ def transcribe_audio(audio_path: str, model_name: str = "small", lang: Optional[
         
         # Kiểm tra nếu kết quả có vấn đề
         if result.get("language") == "music" or not result.get("text", "").strip():
-            console.print("\n[yellow]⚠ Cảnh báo: Whisper phát hiện chủ yếu là nhạc/noise![/yellow]")
+            console.print("\n[yellow]Cảnh báo: Whisper phát hiện chủ yếu là nhạc/noise![/yellow]")
             if lang is None:
                 console.print("   [yellow]💡 Gợi ý: Hãy chỉ định rõ ngôn ngữ để cải thiện kết quả[/yellow]")
         else:
@@ -470,7 +470,7 @@ def transcribe_audio(audio_path: str, model_name: str = "small", lang: Optional[
         
         return result
     except KeyboardInterrupt:
-        console.print("\n[yellow]Đã hủy nhận dạng giọng nói bởi người dùng[/yellow]")
+        console.print("\n[yellow]Đã hủy tiến trình nhận dạng giọng nói[/yellow]")
         sys.exit(0)
     except Exception as e:
         console.print(Panel(
@@ -512,6 +512,10 @@ def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5, thum
     thumb_dir = os.path.join(output_dir, "thumbnails")
     os.makedirs(thumb_dir, exist_ok=True)
     
+    # Khởi tạo biến cleanup sớm để tránh lỗi UnboundLocalError khi KeyboardInterrupt
+    temp_thumbs = []
+    temp_dir = os.path.join(thumb_dir, "temp")
+    
     try:
         # Lấy độ dài video
         probe_cmd = [
@@ -546,9 +550,7 @@ def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5, thum
         
         console.print(f"[green]Số thumbnails:[/green] [yellow]{thumb_count}[/yellow]")
         
-        # Tạo các thumbnail riêng lẻ trước (tạm thời)
-        temp_thumbs = []
-        temp_dir = os.path.join(thumb_dir, "temp")
+        # Tạo thư mục temp cho các thumbnail riêng lẻ
         os.makedirs(temp_dir, exist_ok=True)
 
         # Sử dụng Rich Progress
@@ -654,7 +656,7 @@ def extract_thumbnails(video_path: str, output_dir: str, interval: int = 5, thum
             
             console.print(f"[green]✓ Đã lưu thông tin sprite:[/green] [cyan]sprite_info.txt[/cyan]")
         except Exception as e:
-            console.print(f"[yellow]⚠ Không thể lưu file thông tin: {e}[/yellow]")
+            console.print(f"[yellow]Không thể lưu file thông tin: {e}[/yellow]")
         
         return sprite_info
         
@@ -692,7 +694,7 @@ def create_thumbnail_vtt(sprite_info: dict, output_vtt: str, interval: int = 5, 
                  Nếu None, sẽ dùng đường dẫn tương đối
     """
     if not sprite_info:
-        console.print("[yellow]⚠ Không có thông tin sprite sheet[/yellow]")
+        console.print("[yellow]Không có thông tin sprite sheet[/yellow]")
         return
     
     lines = ["WEBVTT", ""]
@@ -806,10 +808,14 @@ def _main() -> None:
         if recent:
             console.print("[yellow]2.[/yellow] Chọn từ các đường dẫn đã dùng trước (gợi ý)")
             console.print("[yellow]3.[/yellow] Nhập đường dẫn tùy chỉnh")
-            dir_choice = console.input("[bold green]Chọn (1-3):[/bold green] ").strip()
+            dir_choice = console.input("[bold green]Chọn (1-3, mặc định 1):[/bold green] ").strip()
+            if not dir_choice:
+                dir_choice = "1"
         else:
             console.print("[yellow]2.[/yellow] Nhập đường dẫn tùy chỉnh")
-            dir_choice = console.input("[bold green]Chọn (1-2):[/bold green] ").strip()
+            dir_choice = console.input("[bold green]Chọn (1-2, mặc định 1):[/bold green] ").strip()
+            if not dir_choice:
+                dir_choice = "1"
 
         if dir_choice == "1":
             output_dir = os.getcwd()
@@ -867,8 +873,7 @@ def _main() -> None:
                     add_recent_path(output_dir)
                     break
                 except Exception as e:
-                    console.print(f"[red]Đường dẫn không hợp lệ:[/red] {e}")
-                    console.print("[yellow]Vui lòng nhập lại![/yellow]\n")
+                    console.print(f"[red]Đường dẫn không hợp lệ[/red]")
     else:
         # Tạo thư mục nếu được truyền qua CLI
         try:
@@ -886,7 +891,10 @@ def _main() -> None:
     group_dir = None
     # Nếu chưa truyền --group-name, hỏi người dùng
     if not group_name:
-        choose_group = console.input("\n[bold cyan]Bạn có muốn nhóm 3 file (video/audio/vtt) vào thư mục mới không?[/bold cyan] [dim](y/N)[/dim]: ").strip().lower()
+        choose_group = console.input("\n[bold cyan]Bạn có muốn nhóm 3 file (video/audio/vtt) vào thư mục mới không?[/bold cyan] [dim](y/n, mặc định n)[/dim]: ").strip().lower()
+        if not choose_group:
+            choose_group = "n"
+        
         if choose_group == "y":
             group_name = console.input("[bold cyan]Nhập tên thư mục nhóm[/bold cyan] [dim](để trống sẽ dùng tên theo thời điểm)[/dim]: ").strip()
             # loại bỏ dấu ngoặc kép nếu copy-paste
@@ -923,19 +931,23 @@ def _main() -> None:
         table.add_column("Tùy chọn", style="green")
         
         table.add_row("1", "Video + Audio + VTT (lưu tất cả)")
-        table.add_row("2", "Chỉ Video")
-        table.add_row("3", "Chỉ Audio")
-        table.add_row("4", "Chỉ VTT (Phụ đề)")
+        table.add_row("2", "Video")
+        table.add_row("3", "Audio")
+        table.add_row("4", "VTT (Phụ đề)")
         table.add_row("5", "Video + Audio")
         table.add_row("6", "Video + VTT")
         table.add_row("7", "Audio + VTT")
+        table.add_row("8", "Thumbnails (ảnh thumbnail + sprite sheet)")
         
         console.print("\n", table)
-        choice = console.input("[bold green]Nhập lựa chọn (1-7):[/bold green] ").strip()
+        choice = console.input("[bold green]Nhập lựa chọn (1-8, mặc định 1):[/bold green] ").strip()
+        if not choice:
+            choice = "1"
         
         save_video = False
         save_audio = False
         save_vtt = False
+        only_thumbnails = False
         
         if choice == "1":
             save_video = save_audio = save_vtt = True
@@ -951,6 +963,9 @@ def _main() -> None:
             save_video = save_vtt = True
         elif choice == "7":
             save_audio = save_vtt = True
+        elif choice == "8":
+            only_thumbnails = True
+            create_thumbnails = True
         else:
             console.print("[yellow]Lựa chọn không hợp lệ, sẽ lưu tất cả file[/yellow]")
             save_video = save_audio = save_vtt = True
@@ -963,6 +978,8 @@ def _main() -> None:
             files_to_save.append("[magenta]Audio[/magenta]")
         if save_vtt:
             files_to_save.append("[yellow]VTT (Phụ đề)[/yellow]")
+        if only_thumbnails:
+            files_to_save.append("[blue]Thumbnails[/blue]")
         
         if files_to_save:
             console.print(f"[green]Sẽ lưu:[/green] {', '.join(files_to_save)}")
@@ -970,9 +987,53 @@ def _main() -> None:
             console.print("[yellow]Không có file nào được chọn để lưu![/yellow]")
             console.print("[dim]    (Video và Audio vẫn sẽ được tải về để xử lý, sau đó sẽ bị xóa)[/dim]")
 
+    # Menu chọn ngôn ngữ với Rich Table (bỏ qua nếu chỉ tạo thumbnails)
+    language = args.language
+    if not language and not only_thumbnails:
+        table = Table(title="[bold cyan]CHỌN NGÔN NGỮ NHẬN DẠNG[/bold cyan]", box=box.DOUBLE_EDGE, show_lines=False)
+        table.add_column("#", style="yellow", justify="center", width=4)
+        table.add_column("Ngôn ngữ", style="green", width=25)
+        table.add_column("Mã", style="cyan", justify="center", width=6)
+        
+        languages = [
+            ("1", "Tiếng Việt", "vi"),
+            ("2", "Tiếng Anh", "en"),
+            ("3", "Tiếng Nhật", "ja"),
+            ("4", "Tiếng Hàn", "ko"),
+            ("5", "Tiếng Trung", "zh"),
+            ("6", "Tiếng Thái", "th"),
+            ("7", "Tiếng Indonesia", "id"),
+            ("8", "Tự động nhận diện", "auto"),
+            ("0", "Nhập mã khác", "custom"),
+        ]
+        
+        for num, name, code in languages:
+            table.add_row(num, name, code if code not in ["auto", "custom"] else "")
+        
+        console.print("\n", table)
+        choice = console.input("[bold green]Nhập lựa chọn của bạn (mặc định 1):[/bold green] ").strip()
+        if not choice:
+            choice = "1"
+        
+        selected = next((lang for lang in languages if lang[0] == choice), None)
+        
+        if selected:
+            if selected[2] == "custom":
+                language = console.input("[cyan]Nhập mã ngôn ngữ[/cyan] [dim](ví dụ: fr, de, es)[/dim]: ").strip() or None
+                if language:
+                    console.print(f"[green]Đã chọn ngôn ngữ:[/green] [yellow]{language}[/yellow]")
+            elif selected[2] == "auto":
+                language = None
+                console.print("[green]Sẽ tự động nhận diện ngôn ngữ[/green]")
+            else:
+                language = selected[2]
+                console.print(f"[green]Đã chọn:[/green] [cyan]{selected[1]}[/cyan]")
+        else:
+            console.print("[yellow]Lựa chọn không hợp lệ, sẽ dùng auto-detect[/yellow]")
+            language = None
 
     # --- Tùy chọn tạo thumbnails ---
-    create_thumbnails = args.create_thumbnails
+    create_thumbnails = args.create_thumbnails or (not has_save_flags and only_thumbnails)
     thumbnail_interval = args.thumbnail_interval
     thumb_width = args.thumb_width
     thumb_height = args.thumb_height
@@ -981,7 +1042,10 @@ def _main() -> None:
     cdn_url = args.cdn_url
     
     if not create_thumbnails:
-        create_thumb_choice = console.input("\n[bold cyan]Bạn có muốn tạo sprite sheet thumbnails từ video không?[/bold cyan] [dim](y/N)[/dim]: ").strip().lower()
+        create_thumb_choice = console.input("\n[bold cyan]Bạn có muốn tạo sprite sheet thumbnails từ video không?[/bold cyan] [dim](y/n, mặc định n)[/dim]: ").strip().lower()
+        if not create_thumb_choice:
+            create_thumb_choice = "n"
+        
         if create_thumb_choice == "y":
             create_thumbnails = True
             
@@ -991,7 +1055,7 @@ def _main() -> None:
                 thumbnail_interval = int(interval_input)
             
             # Hỏi kích thước thumbnail
-            console.print(f"\n[blue]Kích thước mặc định:[/blue] [yellow]{thumb_width}x{thumb_height}px[/yellow]")
+            console.print(f"[blue]Kích thước mặc định:[/blue] [yellow]{thumb_width}x{thumb_height}px[/yellow]\n")
             size_input = console.input("[cyan]Thay đổi kích thước?[/cyan] [dim](Nhấn Enter để giữ mặc định hoặc nhập 'w,h' ví dụ: 160,90)[/dim]: ").strip()
             if size_input and "," in size_input:
                 try:
@@ -1018,56 +1082,13 @@ def _main() -> None:
                 thumb_format = "webp"
             
             # Hỏi CDN URL (tùy chọn)
-            cdn_input = console.input(f"[cyan]URL CDN cho sprite sheet[/cyan] [dim](Nhấn Enter để bỏ qua)[/dim]: ").strip()
+            cdn_input = console.input(f"[cyan]\nURL CDN cho sprite sheet[/cyan] [dim](Nhấn Enter để bỏ qua, ví dụ: https://cdn.example.com/)[/dim]: ").strip()
             if cdn_input:
                 cdn_url = cdn_input
             
-            console.print(f"[green]Sẽ tạo sprite sheet:[/green] [yellow]{thumb_cols} cột, {thumb_width}x{thumb_height}px, {thumb_format.upper()}, mỗi {thumbnail_interval}s[/yellow]")
+            console.print(f"[green]Hệ thống sẽ tạo sprite sheet:[/green] [yellow]{thumb_cols} cột, {thumb_width}x{thumb_height}px, {thumb_format.upper()}, mỗi {thumbnail_interval}s[/yellow]")
             if cdn_url:
                 console.print(f"[green]Sử dụng CDN URL:[/green] [cyan]{cdn_url}[/cyan]")
-
-    # Menu chọn ngôn ngữ với Rich Table
-    language = args.language
-    if not language:
-        table = Table(title="[bold cyan]CHỌN NGÔN NGỮ NHẬN DẠNG[/bold cyan]", box=box.DOUBLE_EDGE, show_lines=False)
-        table.add_column("#", style="yellow", justify="center", width=4)
-        table.add_column("Ngôn ngữ", style="green", width=25)
-        table.add_column("Mã", style="cyan", justify="center", width=6)
-        
-        languages = [
-            ("1", "Tiếng Việt", "vi"),
-            ("2", "Tiếng Anh", "en"),
-            ("3", "Tiếng Nhật", "ja"),
-            ("4", "Tiếng Hàn", "ko"),
-            ("5", "Tiếng Trung", "zh"),
-            ("6", "Tiếng Thái", "th"),
-            ("7", "Tiếng Indonesia", "id"),
-            ("8", "Tự động nhận diện", "auto"),
-            ("0", "Nhập mã khác", "custom"),
-        ]
-        
-        for num, name, code in languages:
-            table.add_row(num, name, code if code not in ["auto", "custom"] else "")
-        
-        console.print("\n", table)
-        choice = console.input("[bold green]Nhập lựa chọn của bạn:[/bold green] ").strip()
-        
-        selected = next((lang for lang in languages if lang[0] == choice), None)
-        
-        if selected:
-            if selected[2] == "custom":
-                language = console.input("[cyan]Nhập mã ngôn ngữ[/cyan] [dim](ví dụ: fr, de, es)[/dim]: ").strip() or None
-                if language:
-                    console.print(f"[green]Đã chọn ngôn ngữ:[/green] [yellow]{language}[/yellow]")
-            elif selected[2] == "auto":
-                language = None
-                console.print("[green]Sẽ tự động nhận diện ngôn ngữ[/green]")
-            else:
-                language = selected[2]
-                console.print(f"[green]Đã chọn:[/green] [cyan]{selected[1]}[/cyan]")
-        else:
-            console.print("[yellow]Lựa chọn không hợp lệ, sẽ dùng auto-detect[/yellow]")
-            language = None
 
     console.print(Panel(
         "[bold green]BẮT ĐẦU XỬ LÝ[/bold green]\n\n"
@@ -1086,12 +1107,17 @@ def _main() -> None:
 
     # Xử lý
     video = download_from_m3u8(m3u8_link, video_path)
-    audio = extract_audio(video, audio_path)
-    result = transcribe_audio(audio, model_name=args.model, lang=language, use_gpu=use_gpu)
     
-    # Lưu các file theo lựa chọn của người dùng
-    if save_vtt:
-        save_subtitles(result, vtt_path)
+    # Nếu chỉ tạo thumbnails, bỏ qua audio và transcription
+    if only_thumbnails:
+        result = None
+    else:
+        audio = extract_audio(video, audio_path)
+        result = transcribe_audio(audio, model_name=args.model, lang=language, use_gpu=use_gpu)
+        
+        # Lưu các file theo lựa chọn của người dùng
+        if save_vtt:
+            save_subtitles(result, vtt_path)
     
     # Tạo sprite sheet thumbnails nếu được yêu cầu
     sprite_info = {}
@@ -1106,11 +1132,11 @@ def _main() -> None:
         
         if not save_video and os.path.exists(video_path):
             os.remove(video_path)
-            console.print("   [dim]🗑 Đã xóa file video tạm[/dim]")
+            console.print("   [dim]Đã xóa file video tạm[/dim]")
         
         if not save_audio and os.path.exists(audio_path):
             os.remove(audio_path)
-            console.print("   [dim]🗑 Đã xóa file audio tạm[/dim]")
+            console.print("   [dim]Đã xóa file audio tạm[/dim]")
     
     # Tạo bảng tổng kết kết quả
     table = Table(title="[bold green]✓ HOÀN TẤT![/bold green]", box=box.DOUBLE, show_header=True)
