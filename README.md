@@ -11,6 +11,13 @@ Công cụ tải video từ URL m3u8, tách âm thanh và nhận dạng giọng 
 5. [Các tuỳ chọn dòng lệnh](#các-tuỳ-chọn-dòng-lệnh)
 6. [Sprite Sheet Thumbnails](#sprite-sheet-thumbnails)
 7. [Ví dụ sử dụng](#ví-dụ-sử-dụng)
+8. [Mẹo sử dụng](#mẹo-sử-dụng)
+9. [Xử lý sự cố](#xử-lý-sự-cố)
+10. [Cấu trúc kết quả](#cấu-trúc-kết-quả)
+11. [Các tài liệu liên quan](#các-tài-liệu-liên-quan)
+12. [Tính năng Rich Console](#tính-năng-rich-console)
+13. [License](#license)
+14. [Changelog](#changelog)
 
 ---
 
@@ -20,6 +27,17 @@ Công cụ tải video từ URL m3u8, tách âm thanh và nhận dạng giọng 
 - Tách âm thanh từ video (WAV 16kHz mono)
 - Nhận dạng giọng nói bằng Whisper (hỗ trợ 99+ ngôn ngữ)
 - Xuất phụ đề VTT
+- **2 Chế độ xử lý**:
+  - **Direct Mode**: Nhập link m3u8 trực tiếp (xử lý 1 video)
+  - **Batch Mode**: Xử lý nhiều video từ file JSON với checkpoint tự động
+- **Checkpoint System**: Tự động lưu tiến trình khi xử lý batch, tiếp tục từ nơi đã dừng
+  - File checkpoint: `.whisper_m3u8_transcriber_checkpoint.json` (trong thư mục hiện tại)
+  - Menu quản lý: Xem thông tin và xóa checkpoint
+  - Hỗ trợ KeyboardInterrupt (Ctrl+C) an toàn
+- **Recent Paths**: Tự động lưu các đường dẫn đã dùng
+  - File config: `.whisper_m3u8_transcriber_config.json` (trong thư mục hiện tại)
+  - Hiển thị gợi ý khi chọn thư mục lưu trữ
+  - Tự động thêm path mới vào đầu danh sách
 - **Chọn lựa file cần lưu**: Video, Audio, VTT, Thumbnails hoặc bất kỳ tổ hợp nào (8 options)
 - **Nhóm file vào thư mục mới**: Tự động hoặc đặt tên tuỳ chỉnh
 - **Giao diện Rich Console**: Progress bars, status indicators, bảng đẹp với màu sắc gradient
@@ -113,14 +131,90 @@ pip install openai-whisper rich
 python .\main.py
 ```
 
-Script sẽ hiển thị logo ASCII art với gradient màu sắc, sau đó hỏi bạn:
+Script sẽ hiển thị logo ASCII art với gradient màu sắc và menu chính:
 
-1. URL m3u8 hoặc đường dẫn file
-2. Thư mục lưu trữ (hiện tại, chọn từ lịch sử, hoặc tuỳ chỉnh)
-3. Có nhóm file vào thư mục con mới không (nhập tên thư mục)
-4. **Chọn file nào cần lưu**: Video, Audio, VTT, Thumbnails hoặc tất cả (8 tùy chọn)
-5. Có tạo sprite sheet thumbnails không (tùy chọn)
-6. Chọn ngôn ngữ nhận dạng từ bảng (chỉ khi cần transcription - 9 ngôn ngữ phổ biến + tùy chỉnh)
+```
+1. Nhập link trực tiếp (Direct Mode)
+2. Xử lý theo file JSON (Batch Mode)
+3. Quản lý checkpoint (xem/xóa checkpoint đã lưu)
+4. Hướng dẫn sử dụng (hiển thị help chi tiết)
+```
+
+#### Chế độ Direct (xử lý 1 video)
+
+1. Chọn chế độ `1` từ menu chính
+2. Nhập URL m3u8
+3. Chọn thư mục lưu trữ:
+   - Thư mục hiện tại
+   - Chọn từ lịch sử đã dùng (lưu trong `.whisper_m3u8_transcriber_config.json`)
+   - Nhập đường dẫn tùy chỉnh
+4. Có nhóm file vào thư mục con mới không (nhập tên thư mục hoặc để trống dùng timestamp)
+5. **Chọn file nào cần lưu** (8 tùy chọn):
+   - 1: Video + Audio + VTT (lưu tất cả)
+   - 2: Chỉ Video
+   - 3: Chỉ Audio
+   - 4: Chỉ VTT (Phụ đề)
+   - 5: Video + Audio
+   - 6: Video + VTT
+   - 7: Audio + VTT
+   - 8: Chỉ Thumbnails (không lưu video/audio)
+6. Có tạo sprite sheet thumbnails không (y/n)
+   - Nếu có: hỏi interval, kích thước, số cột, định dạng (webp/jpg), CDN URL
+7. Chọn ngôn ngữ nhận dạng (chỉ khi cần transcription - option 1,4,6,7):
+   - 1-7: Ngôn ngữ phổ biến (vi, en, ja, ko, zh, th, id)
+   - 8: Tự động nhận diện
+   - 0: Nhập mã khác
+
+#### Chế độ Batch (xử lý nhiều video)
+
+1. Chọn chế độ `2` từ menu chính
+2. Nhập đường dẫn file JSON (ví dụ: `input.json` hoặc `input_example.txt`)
+3. Hệ thống tự động kiểm tra checkpoint:
+   - Nếu có checkpoint với cùng file JSON, hỏi có muốn tiếp tục không
+   - Hiển thị tiến độ đã xử lý (ví dụ: 5/10 items) và thời gian lưu cuối
+4. **Chọn file nào cần lưu** (8 tùy chọn - giống Direct Mode)
+5. **Chọn ngôn ngữ** (chỉ khi cần transcription)
+6. **Cấu hình thumbnails** (nếu muốn)
+7. Chọn chạy đến item thứ mấy (Enter để chạy hết, hoặc nhập số để dừng sớm)
+8. Xử lý tự động từng item theo thứ tự
+9. Sau mỗi item thành công, checkpoint được lưu tự động
+
+**Cấu trúc file JSON:**
+
+```json
+{
+  "root_path": "E:\\Videos\\Subtitles",
+  "items": [
+    {
+      "slug": "video-001",
+      "m3u8_url": "https://example.com/stream1.m3u8",
+      "folder_name": "video-phần-1"
+    },
+    {
+      "slug": "video-002",
+      "m3u8_url": "https://example.com/stream2.m3u8",
+      "folder_name": "video-phần-2"
+    }
+  ]
+}
+```
+
+- `root_path`: Thư mục gốc (ví dụ: `E:\Videos\Subtitles`)
+- `slug`: Tên thư mục con (sẽ ghép với root_path)
+- `m3u8_url`: URL của video m3u8
+- `folder_name`: Tên thư mục nhóm file (tương đương --group-name)
+
+**Đường dẫn cuối cùng:** `{root_path}\{slug}\{folder_name}\`
+
+**Ví dụ:** `E:\Videos\Subtitles\video-001\video-phần-1\`
+
+**Checkpoint System:**
+
+- Tự động lưu tiến trình sau mỗi item thành công vào file `.whisper_m3u8_transcriber_checkpoint.json` (trong thư mục hiện tại)
+- Khi bị gián đoạn (Ctrl+C), checkpoint được lưu lại ngay lập tức
+- Lần chạy tiếp theo với cùng file JSON sẽ hỏi có muốn tiếp tục không
+- Có thể chọn bắt đầu lại từ đầu hoặc tiếp tục từ item cuối cùng
+- Menu chính có option "Quản lý checkpoint" để xem và xóa checkpoint
 
 **Giao diện Rich Console bao gồm:**
 
@@ -136,6 +230,8 @@ Script sẽ hiển thị logo ASCII art với gradient màu sắc, sau đó hỏ
 
 | Tuỳ chọn               | Mô tả                              | Ví dụ                                                        |
 | ---------------------- | ---------------------------------- | ------------------------------------------------------------ |
+| `--mode`               | Chế độ xử lý                       | `--mode "direct"` hoặc `--mode "batch"`                      |
+| `--json`               | Đường dẫn file JSON (batch mode)   | `--json "input.json"`                                        |
 | `--m3u8`               | URL m3u8 hoặc đường dẫn file       | `--m3u8 "https://example.com/video.m3u8"`                    |
 | `--output-dir`         | Thư mục lưu trữ                    | `--output-dir "E:\Videos"`                                   |
 | `--group-name`         | Tên thư mục nhóm file (tuỳ chọn)   | `--group-name "bai_hoc_1"`                                   |
@@ -205,9 +301,22 @@ python .\main.py `
   --thumb-format "webp"
 ```
 
+**Batch Mode:**
+
+```powershell
+python .\main.py `
+  --mode batch `
+  --json "input.json" `
+  --language "vi" `
+  --save-video --save-vtt `
+  --create-thumbnails
+```
+
 ### Kết quả
 
 Sau khi hoàn tất, bạn sẽ có:
+
+**Direct Mode:**
 
 ```text
 output-dir/
@@ -218,6 +327,30 @@ output-dir/
     ├── thumbnails.vtt (VTT cho sprite sheet)
     └── thumbnails/
         └── sprite.webp (hoặc sprite.jpg)
+```
+
+**Batch Mode:**
+
+```text
+E:\Videos\Subtitles\
+├── video-001\
+│   └── video-phần-1\
+│       ├── video.mp4
+│       ├── movie_vi.vtt
+│       └── thumbnails/
+│           └── sprite.webp
+├── video-002\
+│   └── video-phần-2\
+│       ├── video.mp4
+│       ├── movie_vi.vtt
+│       └── thumbnails/
+│           └── sprite.webp
+└── video-003\
+    └── video-phần-3\
+        ├── video.mp4
+        ├── movie_vi.vtt
+        └── thumbnails/
+            └── sprite.webp
 ```
 
 ### File VTT cho Sprite Sheet
@@ -470,10 +603,13 @@ E:/Sprites/
 
 - Luôn chỉ định ngôn ngữ: `--language "vi"` thay vì để auto-detect
 - Các tham số tối ưu đã được cấu hình sẵn:
-  - `temperature=0`: Giảm randomness
-  - `condition_on_previous_text=True`: Cải thiện ngữ cảnh
+  - `temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0)`: Fallback temperatures để giảm lặp
+  - `condition_on_previous_text=False`: Tắt để tránh lặp lại context
   - `no_speech_threshold=0.6`: Lọc nhạc/noise tốt hơn
   - `compression_ratio_threshold=2.4`: Phát hiện lỗi tốt hơn
+  - `logprob_threshold=-1.0`: Lọc kết quả không chắc chắn
+  - `best_of=5`: Lấy kết quả tốt nhất trong 5 lần decode
+  - `initial_prompt`: Tự động thêm prompt theo ngôn ngữ để cải thiện độ chính xác
 
 ### 3. Tiết kiệm dung lượng và thời gian
 
@@ -508,11 +644,15 @@ Chạy:
 | `ffmpeg: command not found`   | FFmpeg chưa được cài đặt hoặc thêm vào PATH. Xem lại [bước cài FFmpeg](#bước-2-cài-đặt-ffmpeg) |
 | `No module named 'whisper'`   | Chạy `pip install openai-whisper`                                                              |
 | `No module named 'rich'`      | Chạy `pip install rich`                                                                        |
+| `No module named 'torch'`     | Chạy `pip install torch` hoặc cài CUDA version cho GPU                                         |
 | Xử lý chậm                    | Sử dụng mô hình nhỏ: `--model "tiny"` hoặc cài CUDA để dùng GPU                                |
-| URL không hợp lệ              | Đảm bảo URL kết thúc bằng `.m3u8` và bắt đầu bằng `http://` hoặc `https://`                    |
+| URL không hợp lệ              | Đảm bảo URL chứa `.m3u8` và bắt đầu bằng `http://` hoặc `https://`                             |
 | Whisper chỉ nhận dạng "Music" | Chỉ định rõ ngôn ngữ: `--language "vi"` thay vì để auto-detect                                 |
+| Kết quả bị lặp lại            | Script đã tối ưu với `condition_on_previous_text=False` và `best_of=5`                         |
 | Progress bar không hiển thị   | Console không hỗ trợ ANSI colors, script vẫn chạy bình thường                                  |
-| Không đủ dung lượng ổ cứng    | Tính năng `--save-vtt` chỉ lưu phụ đề (~1-5MB) thay vì video (GB)                              |
+| Không đủ dung lượng ổ cứng    | Chọn option 4 (chỉ lưu VTT) hoặc option 8 (chỉ thumbnails)                                     |
+| Checkpoint không tìm thấy     | Checkpoint lưu ở `.whisper_m3u8_transcriber_checkpoint.json` (thư mục hiện tại)                |
+| Recent paths không lưu        | Config lưu ở `.whisper_m3u8_transcriber_config.json` (thư mục hiện tại)                        |
 
 ---
 
@@ -520,15 +660,49 @@ Chạy:
 
 Sau khi chạy, bạn sẽ có:
 
+### Cấu trúc file output
+
 ```text
 output-dir/
 └── group-name/                    # Tuỳ chọn, tự động tạo nếu chọn
-    ├── video.mp4                  # Nếu --save-video (tuỳ chọn)
-    ├── audio.wav                  # Nếu --save-audio (tuỳ chọn)
-    ├── movie_<lang>.vtt           # Nếu --save-vtt (tuỳ chọn)
-    ├── thumbnails.vtt             # Nếu --create-thumbnails (tuỳ chọn)
-    └── thumbnails/                # Nếu --create-thumbnails (tuỳ chọn)
-        └── sprite.webp (hoặc .jpg)
+    ├── video.mp4                  # Nếu chọn lưu video
+    ├── audio.wav                  # Nếu chọn lưu audio
+    ├── movie_<lang>.vtt           # Nếu chọn lưu VTT (phụ đề)
+    ├── thumbnails.vtt             # VTT cho sprite sheet (nếu tạo thumbnails)
+    └── thumbnails/                # Thư mục thumbnails
+        ├── sprite.webp            # Hoặc sprite.jpg tùy chọn định dạng
+        └── sprite_info.txt        # File thông tin chi tiết về sprite
+```
+
+### File config và checkpoint
+
+```text
+./ (Thư mục hiện tại)
+├── .whisper_m3u8_transcriber_config.json      # Lưu recent paths
+└── .whisper_m3u8_transcriber_checkpoint.json  # Lưu checkpoint batch mode
+```
+
+**File config (recent paths):**
+
+```json
+{
+  "recent_paths": [
+    "E:\\Videos\\Subtitles",
+    "D:\\Projects\\videos",
+    "C:\\Users\\username\\Desktop"
+  ]
+}
+```
+
+**File checkpoint:**
+
+```json
+{
+  "json_path": "E:\\Projects\\input.json",
+  "last_index": 5,
+  "total": 10,
+  "timestamp": 1733404123.45
+}
 ```
 
 **Bảng tổng kết khi hoàn tất:**
@@ -602,19 +776,36 @@ Dự án này sử dụng:
 
 ---
 
-**Lần cập nhật cuối**: 05 tháng 12 năm 2025
+**Lần cập nhật cuối**: 05 tháng 12 năm 2025 (v1.2.0)
 
 ---
 
 ## Changelog
 
-### v1.1.0 (05/12/2025)
+### v1.2.0 (05/12/2025)
 
-- **[Feature]** Thêm option 8: Chỉ tạo thumbnails mà không cần transcription
-- **[Feature]** Tự động bỏ qua bước chọn ngôn ngữ khi không cần transcription (option 2, 3, 5, 8)
-- **[Improvement]** Cải thiện UI consistency với default values cho các prompts
-- **[Fix]** Sửa lỗi UnboundLocalError khi KeyboardInterrupt trong quá trình tạo thumbnails
-- **[Refactor]** Tối ưu logic xử lý: chỉ tách audio và transcription khi thực sự cần thiết
+- **[Feature]** Thêm Recent Paths: Lưu và gợi ý các đường dẫn đã dùng
+  - File config: `.whisper_m3u8_transcriber_config.json` (lưu trong thư mục hiện tại)
+  - Hỗ trợ chọn nhanh từ lịch sử hoặc nhập mới
+- **[Feature]** Menu quản lý checkpoint: Xem thông tin và xóa checkpoint
+  - Option 3 trong menu chính
+  - Hiển thị tiến độ, file JSON, thời gian lưu
+- **[Feature]** Hướng dẫn sử dụng tích hợp: Option 4 trong menu chính
+  - Hiển thị full hướng dẫn với Rich formatting
+  - Tables, Panels với border styles đẹp mắt
+- **[Feature]** Option 8: Chỉ tạo thumbnails mà không cần transcription
+- **[Feature]** Batch Mode: Hỏi chạy đến item thứ mấy (cho phép dừng sớm)
+- **[Improvement]** Tối ưu Whisper parameters:
+  - `temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0)`: Fallback để giảm lặp
+  - `condition_on_previous_text=False`: Tắt để tránh lặp context
+  - `best_of=5`: Lấy kết quả tốt nhất
+  - `initial_prompt`: Tự động theo ngôn ngữ
+- **[Improvement]** Cải thiện xử lý KeyboardInterrupt:
+  - Cleanup temp files an toàn
+  - Lưu checkpoint ngay khi Ctrl+C
+- **[Improvement]** Tối ưu logic: Chỉ tách audio và transcription khi cần
+- **[Fix]** Sửa lỗi UnboundLocalError khi KeyboardInterrupt trong thumbnails
+- **[UI]** Cải thiện consistency với default values cho tất cả prompts
 
 ### v1.0.0 (03/12/2025)
 
@@ -623,3 +814,4 @@ Dự án này sử dụng:
 - Nhận dạng giọng nói bằng Whisper
 - Tạo sprite sheet thumbnails
 - Giao diện Rich Console với progress bars
+- Checkpoint system cho batch mode

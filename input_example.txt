@@ -1,0 +1,20 @@
+{
+  "root_path": "E:\\Videos\\Subtitles",
+  "items": [
+    {
+      "slug": "video-001",
+      "m3u8_url": "https://example.com/stream1.m3u8",
+      "folder_name": "video-phần-1"
+    },
+    {
+      "slug": "video-002",
+      "m3u8_url": "https://example.com/stream2.m3u8",
+      "folder_name": "video-phần-2"
+    },
+    {
+      "slug": "video-003",
+      "m3u8_url": "https://example.com/stream3.m3u8",
+      "folder_name": "video-phần-3"
+    }
+  ]
+}

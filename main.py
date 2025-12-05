@@ -61,9 +61,8 @@ def check_gpu():
 
 
 def _get_config_path() -> str:
-    """Return path to config file in user home directory."""
-    home = os.path.expanduser("~")
-    return os.path.join(home, ".whisper_m3u8_transcriber_config.json")
+    """Return path to config file in current directory."""
+    return ".whisper_m3u8_transcriber_config.json"
 
 
 def load_recent_paths() -> List[str]:
@@ -88,6 +87,49 @@ def save_recent_paths(paths: List[str]) -> None:
         data = {"recent_paths": paths}
         with open(cfg, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _get_checkpoint_path() -> str:
+    """Return path to checkpoint file in current directory."""
+    return ".whisper_m3u8_transcriber_checkpoint.json"
+
+
+def load_checkpoint() -> dict:
+    """Load checkpoint data from file. Returns dict with last_json_path, last_index, etc."""
+    cfg = _get_checkpoint_path()
+    try:
+        if os.path.exists(cfg):
+            with open(cfg, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+
+def save_checkpoint(json_path: str, last_index: int, total: int) -> None:
+    """Save checkpoint data to file."""
+    cfg = _get_checkpoint_path()
+    try:
+        data = {
+            "json_path": json_path,
+            "last_index": last_index,
+            "total": total,
+            "timestamp": time.time()
+        }
+        with open(cfg, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def clear_checkpoint() -> None:
+    """Clear checkpoint file."""
+    cfg = _get_checkpoint_path()
+    try:
+        if os.path.exists(cfg):
+            os.remove(cfg)
     except Exception:
         pass
 
@@ -375,6 +417,115 @@ def result_to_vtt(result: dict) -> str:
 
 
 
+
+
+def display_usage():
+    """Hiển thị hướng dẫn sử dụng chi tiết"""
+    console.print("\n")
+    
+    # Tiêu đề hướng dẫn
+    title = Text("HƯỚNG DẪN SỬ DỤNG", style="bold cyan")
+    console.print(Panel(title, box=box.DOUBLE, border_style="cyan", padding=(0, 2)))
+    console.print()
+    
+    # Phần 1: Giới thiệu
+    console.print(Panel(
+        "[bold yellow]Whisper M3U8 Transcriber[/bold yellow]\n\n"
+        "Công cụ tải video từ URL m3u8, tách âm thanh và nhận dạng giọng nói bằng OpenAI Whisper.\n"
+        "Hỗ trợ 2 chế độ xử lý: Direct (1 video) và Batch (nhiều video từ JSON).",
+        title="[bold]Giới thiệu[/bold]",
+        border_style="green"
+    ))
+    console.print()
+    
+    # Phần 2: Các chế độ xử lý
+    modes_table = Table(box=box.ROUNDED, show_header=True, border_style="blue")
+    modes_table.add_column("Chế độ", style="cyan bold", width=20)
+    modes_table.add_column("Mô tả", style="white", width=50)
+    
+    modes_table.add_row(
+        "Direct Mode",
+        "• Nhập link m3u8 trực tiếp\n• Xử lý một video đơn lẻ\n• Menu tương tác từng bước"
+    )
+    modes_table.add_row(
+        "Batch Mode",
+        "• Xử lý nhiều video từ file JSON\n• Hỗ trợ checkpoint tự động\n• Tiếp tục khi bị gián đoạn"
+    )
+    
+    console.print(Panel(modes_table, title="[bold]Các chế độ xử lý[/bold]", border_style="blue"))
+    console.print()
+    
+    # Phần 3: Hướng dẫn nhanh
+    console.print(Panel(
+        "[bold cyan]Chạy đơn giản:[/bold cyan]\n"
+        "  [yellow]python main.py[/yellow]\n\n"
+        "[bold cyan]Direct Mode:[/bold cyan]\n"
+        "  1. Chọn chế độ [green]1[/green]\n"
+        "  2. Nhập URL m3u8 hoặc đường dẫn file\n"
+        "  3. Chọn thư mục lưu trữ\n"
+        "  4. Chọn file cần lưu (Video/Audio/VTT/Thumbnails)\n"
+        "  5. Chọn ngôn ngữ nhận dạng\n\n"
+        "[bold cyan]Batch Mode:[/bold cyan]\n"
+        "  1. Chọn chế độ [green]2[/green]\n"
+        "  2. Nhập đường dẫn file JSON\n"
+        "  3. Hệ thống tự động xử lý từng item",
+        title="[bold]Hướng dẫn nhanh[/bold]",
+        border_style="magenta"
+    ))
+    console.print()
+    
+    # Phần 4: Cấu trúc file JSON
+    console.print(Panel(
+        '[bold cyan]Ví dụ file JSON:[/bold cyan]\n\n'
+        '[yellow]{\n'
+        '  "root_path": "E:\\\\Videos\\\\Subtitles",\n'
+        '  "items": [\n'
+        '    {\n'
+        '      "slug": "video-001",\n'
+        '      "m3u8_url": "https://example.com/stream.m3u8",\n'
+        '      "folder_name": "video-phần-1"\n'
+        '    }\n'
+        '  ]\n'
+        '}[/yellow]\n\n'
+        '[dim]• root_path: Thư mục gốc\n'
+        '• slug: Tên thư mục con\n'
+        '• m3u8_url: URL video m3u8\n'
+        '• folder_name: Tên nhóm file[/dim]',
+        title="[bold]Cấu trúc file JSON (Batch Mode)[/bold]",
+        border_style="yellow"
+    ))
+    console.print()
+    
+    # Phần 5: Tính năng nổi bật
+    features_table = Table(box=box.SIMPLE, show_header=False, border_style="green")
+    features_table.add_column("Feature", style="white", width=70)
+    
+    features_table.add_row("[bold]Checkpoint System:[/bold] Tự động lưu tiến trình, tiếp tục khi gián đoạn")
+    features_table.add_row("[bold]Sprite Sheet Thumbnails:[/bold] Tạo ảnh thumbnails và VTT với tọa độ")
+    features_table.add_row("[bold]Hỗ trợ đa ngôn ngữ:[/bold] 99+ ngôn ngữ qua Whisper AI")
+    features_table.add_row("[bold]Lựa chọn file lưu:[/bold] Chọn Video/Audio/VTT/Thumbnails")
+    features_table.add_row("[bold]GPU Support:[/bold] Tự động phát hiện và sử dụng CUDA nếu có")
+    features_table.add_row("[bold]Rich Console:[/bold] Progress bars, tables, panels đẹp mắt")
+    
+    console.print(Panel(features_table, title="[bold]Tính năng nổi bật[/bold]", border_style="green"))
+    console.print()
+    
+    # Phần 6: Yêu cầu hệ thống
+    console.print(Panel(
+        "[bold cyan]Phần mềm cần thiết:[/bold cyan]\n"
+        "  • Python 3.8+\n"
+        "  • FFmpeg (xử lý video/audio)\n\n"
+        "[bold cyan]Thư viện Python:[/bold cyan]\n"
+        "  [yellow]pip install openai-whisper rich[/yellow]\n\n"
+        "[bold cyan]GPU (tùy chọn, tăng tốc):[/bold cyan]\n"
+        "  [yellow]pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118[/yellow]",
+        title="[bold]Yêu cầu hệ thống[/bold]",
+        border_style="red"
+    ))
+    console.print()
+    
+    console.print("[bold green]Chi tiết xem thêm trong README.md[/bold green]\n")
+    console.input("[dim]Nhấn Enter để quay lại menu chính...[/dim]")
 
 
 def display_menu():
@@ -743,6 +894,234 @@ def create_thumbnail_vtt(sprite_info: dict, output_vtt: str, interval: int = 5, 
     console.print(f"[bold green]✓ Đã tạo file VTT sprite sheet:[/bold green] [cyan]{output_vtt}[/cyan]")
     console.print(f"   [blue]Sprite URL:[/blue] [dim]{sprite_url}[/dim]")
 
+def process_batch_from_json(json_path: str, args) -> None:
+    """Process multiple items from JSON file with checkpoint support."""
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        console.print(f"[bold red]LỖI:[/bold red] Không thể đọc file JSON: {e}")
+        sys.exit(1)
+    
+    root_path = data.get("root_path", "")
+    items = data.get("items", [])
+    
+    if not items:
+        console.print("[bold red]LỖI:[/bold red] File JSON không có items nào")
+        sys.exit(1)
+    
+    console.print(f"\n[bold cyan]Tìm thấy {len(items)} items trong file JSON[/bold cyan]")
+    
+    # Check for checkpoint
+    checkpoint = load_checkpoint()
+    start_index = 0
+    
+    if checkpoint.get("json_path") == os.path.abspath(json_path):
+        last_index = checkpoint.get("last_index", 0)
+        total = checkpoint.get("total", len(items))
+        timestamp = checkpoint.get("timestamp", 0)
+        
+        if last_index > 0 and last_index < len(items):
+            # Format timestamp
+            import datetime
+            time_saved = datetime.datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+            
+            console.print(Panel(
+                f"[bold yellow]TÌM THẤY CHECKPOINT[/bold yellow]\n\n"
+                f"[cyan]Đã xử lý:[/cyan] [green]{last_index}/{total}[/green] items\n"
+                f"[cyan]Lần chạy cuối:[/cyan] [dim]{time_saved}[/dim]\n"
+                f"[cyan]Tiếp theo:[/cyan] Item #{last_index + 1}",
+                border_style="yellow",
+                box=box.ROUNDED
+            ))
+            
+            resume = console.input("[bold green]Tiếp tục từ checkpoint? (y/n, mặc định y):[/bold green] ").strip().lower()
+            if not resume or resume == "y":
+                start_index = last_index
+                console.print(f"[green]✓ Tiếp tục từ item #{start_index + 1}[/green]")
+            else:
+                clear_checkpoint()
+                console.print("[yellow]Đã xóa checkpoint, bắt đầu lại từ đầu[/yellow]")
+        elif last_index >= len(items):
+            # Checkpoint shows all items were completed
+            console.print("[green]✓ Tất cả items đã được xử lý trước đó[/green]")
+            clear_checkpoint()
+    
+    # Ask user how many items to process
+    end_index = len(items)
+    stop_at = console.input(f"\n[bold cyan]Chạy đến item thứ mấy? (1-{len(items)}, Enter để chạy hết):[/bold cyan] ").strip()
+    if stop_at.isdigit():
+        end_index = min(int(stop_at), len(items))
+        console.print(f"[green]✓ Sẽ chạy từ item #{start_index + 1} đến #{end_index}[/green]")
+    
+    # Show processing info
+    console.print(Panel(
+        f"[bold cyan]BẮT ĐẦU XỬ LÝ BATCH[/bold cyan]\n\n"
+        f"[yellow]Tổng items:[/yellow] {len(items)}\n"
+        f"[yellow]Bắt đầu từ:[/yellow] Item #{start_index + 1}\n"
+        f"[yellow]Kết thúc tại:[/yellow] Item #{end_index}\n"
+        f"[yellow]Số lượng xử lý:[/yellow] {end_index - start_index} items\n\n"
+        f"[dim]Checkpoint sẽ tự động lưu sau mỗi item[/dim]\n"
+        f"[dim]⚡ Nhấn Ctrl+C để dừng (tiến trình sẽ được lưu)[/dim]",
+        border_style="cyan",
+        box=box.DOUBLE
+    ))
+    
+    # Process items
+    for i in range(start_index, end_index):
+        item = items[i]
+        slug = item.get("slug", "")
+        m3u8_url = item.get("m3u8_url", "")
+        folder_name = item.get("folder_name", slug)
+        
+        if not m3u8_url or not validate_url(m3u8_url):
+            console.print(f"\n[bold red]Bỏ qua item #{i+1}:[/bold red] URL không hợp lệ")
+            # Save checkpoint to skip this item next time
+            save_checkpoint(os.path.abspath(json_path), i + 1, len(items))
+            continue
+        
+        console.print("\n")
+        item_info = f"[bold cyan]Đang xử lý item {i+1}/{end_index}[/bold cyan]\n\n"
+        item_info += f"[yellow]Slug:[/yellow] {slug}\n"
+        item_info += f"[yellow]Folder:[/yellow] {folder_name}"
+        console.print(Panel(item_info, box=box.DOUBLE, border_style="bright_cyan", title="[bold bright_white]PROCESSING[/bold bright_white]"))
+        
+        try:
+            # Determine output directory
+            if root_path:
+                output_base = os.path.join(root_path, slug)
+            else:
+                output_base = slug
+            
+            os.makedirs(output_base, exist_ok=True)
+            
+            # Create group directory
+            group_dir = os.path.join(output_base, folder_name)
+            os.makedirs(group_dir, exist_ok=True)
+            
+            # Process this item
+            process_single_item(
+                m3u8_url=m3u8_url,
+                output_dir=group_dir,
+                args=args,
+                item_number=i+1,
+                total_items=end_index
+            )
+            
+            # Save checkpoint after each successful item
+            save_checkpoint(os.path.abspath(json_path), i + 1, len(items))
+            console.print(f"[dim]Đã lưu checkpoint: {i + 1}/{len(items)} items hoàn thành[/dim]")
+            
+        except KeyboardInterrupt:
+            console.print("\n[bold yellow]Đã hủy bởi người dùng[/bold yellow]")
+            save_checkpoint(os.path.abspath(json_path), i, len(items))
+            console.print(f"[green]✓ Đã lưu checkpoint tại item #{i+1}[/green]")
+            console.print(f"[cyan]Lần chạy sau sẽ tiếp tục từ item #{i+1}[/cyan]")
+            sys.exit(0)
+        except Exception as e:
+            console.print(f"\n[bold red]LỖI xử lý item #{i+1}:[/bold red] {e}")
+            # Save checkpoint even on error to skip this item next time
+            save_checkpoint(os.path.abspath(json_path), i + 1, len(items))
+            console.print(f"[yellow]Đã bỏ qua item này, checkpoint đã lưu[/yellow]")
+            # Continue to next item on error
+            continue
+    
+    # Clear checkpoint when completed all
+    if end_index >= len(items):
+        clear_checkpoint()
+        console.print("\n")
+        console.print(Panel(
+            "[bold green]HOÀN THÀNH TẤT CẢ ITEMS![/bold green]\n\n"
+            f"[cyan]Tổng số items xử lý:[/cyan] [green]{end_index - start_index}[/green]\n"
+            f"[cyan]Từ item:[/cyan] #{start_index + 1}\n"
+            f"[cyan]Đến item:[/cyan] #{end_index}\n\n"
+            "[green]✓ Checkpoint đã được xóa[/green]\n"
+            "[dim]Lần chạy sau sẽ bắt đầu từ đầu[/dim]",
+            border_style="green",
+            box=box.DOUBLE
+        ))
+    else:
+        save_checkpoint(os.path.abspath(json_path), end_index, len(items))
+        console.print("\n")
+        console.print(Panel(
+            f"[bold green]✓ ĐÃ XỬ LÝ ĐẾN ITEM #{end_index}[/bold green]\n\n"
+            f"[cyan]Đã xử lý:[/cyan] [green]{end_index}/{len(items)}[/green] items\n"
+            f"[cyan]Còn lại:[/cyan] [yellow]{len(items) - end_index}[/yellow] items\n"
+            f"[cyan]Item tiếp theo:[/cyan] #{end_index + 1}\n\n"
+            "[green]✓ Checkpoint đã lưu[/green]\n"
+            f"[cyan]Lần chạy sau sẽ tiếp tục từ item #{end_index + 1}[/cyan]",
+            border_style="cyan",
+            box=box.DOUBLE
+        ))
+
+
+
+def process_single_item(m3u8_url: str, output_dir: str, args, item_number: int = 0, total_items: int = 0) -> None:
+    """Process a single m3u8 item (download, extract, transcribe)."""
+    
+    # Determine which files to save
+    has_save_flags = args.save_video or args.save_audio or args.save_vtt
+    if has_save_flags:
+        save_video = args.save_video
+        save_audio = args.save_audio
+        save_vtt = args.save_vtt
+    else:
+        save_video = True
+        save_audio = True
+        save_vtt = True
+    
+    # Language
+    language = args.language or "auto"
+    
+    # GPU
+    use_gpu = not args.no_gpu
+    
+    # Thumbnails
+    create_thumbnails = args.create_thumbnails
+    
+    # File paths
+    video_path = os.path.join(output_dir, "video.mp4")
+    audio_path = os.path.join(output_dir, "audio.wav")
+    vtt_path = os.path.join(output_dir, f"{args.output_prefix}_{language}.vtt")
+    thumbnail_vtt_path = os.path.join(output_dir, "thumbnails.vtt")
+    
+    # Process
+    video = download_from_m3u8(m3u8_url, video_path)
+    
+    need_transcription = save_vtt
+    if need_transcription:
+        audio = extract_audio(video, audio_path)
+        result = transcribe_audio(audio, model_name=args.model, lang=language if language != "auto" else None, use_gpu=use_gpu)
+        
+        if save_vtt:
+            save_subtitles(result, vtt_path)
+    
+    # Thumbnails
+    sprite_info = {}
+    if create_thumbnails:
+        sprite_info = extract_thumbnails(
+            video_path, output_dir, 
+            args.thumbnail_interval, 
+            args.thumb_width, 
+            args.thumb_height, 
+            args.thumb_cols, 
+            args.thumb_format
+        )
+        if sprite_info:
+            create_thumbnail_vtt(sprite_info, thumbnail_vtt_path, args.thumbnail_interval, args.cdn_url)
+    
+    # Cleanup
+    if not save_video and os.path.exists(video_path):
+        os.remove(video_path)
+        console.print(f"[dim]Đã xóa video[/dim]")
+    
+    if not save_audio and os.path.exists(audio_path):
+        os.remove(audio_path)
+        console.print(f"[dim]Đã xóa audio[/dim]")
+    
+    console.print(f"\n[bold green]✓ Hoàn thành item #{item_number}/{total_items}[/bold green]")
+
+
 def main() -> None:
     try:
         display_menu()
@@ -753,6 +1132,8 @@ def main() -> None:
 
 def _main() -> None:
     parser = argparse.ArgumentParser(description="Tải video từ m3u8, tách audio và nhận dạng giọng nói bằng Whisper")
+    parser.add_argument("--mode", choices=["direct", "batch"], help="Chế độ: 'direct' (nhập link trực tiếp) hoặc 'batch' (xử lý từ file JSON)")
+    parser.add_argument("--json", help="Đường dẫn file JSON (dùng cho mode batch)")
     parser.add_argument("--m3u8", help="URL đến playlist m3u8 (nếu bỏ qua, bạn sẽ được nhắc)")
     parser.add_argument("-l", "--language", help="Mã ngôn ngữ để truyền cho Whisper (ví dụ: 'vi', 'en'). Nếu bỏ qua, bạn sẽ được nhắc.")
     parser.add_argument("-m", "--model", default="small", help="Mô hình Whisper để sử dụng (mặc định: small)")
@@ -778,6 +1159,288 @@ def _main() -> None:
     # Kiểm tra GPU
     use_gpu = not args.no_gpu
     check_gpu()
+    
+    # Select mode if not provided
+    mode = args.mode
+    if not mode:
+        while True:            
+            table = Table(box=box.ROUNDED, show_header=True, padding=(0, 2))
+            table.add_column("#", style="yellow", justify="center", width=4)
+            table.add_column("Chế độ", style="green", width=25)
+            table.add_column("Mô tả", style="dim", width=40)
+            
+            table.add_row("1", "Nhập link trực tiếp", "Xử lý một link m3u8 đơn lẻ")
+            table.add_row("2", "Xử lý theo file JSON", "Xử lý nhiều link từ file input.json")
+            table.add_row("3", "Quản lý checkpoint", "Xem hoặc xóa checkpoint đã lưu")
+            table.add_row("4", "Hướng dẫn sử dụng", "Xem hướng dẫn chi tiết")
+            
+            console.print(table)
+            choice = console.input("[bold green]Nhập lựa chọn (1-4, mặc định 1):[/bold green] ").strip()
+            if not choice:
+                choice = "1"
+            
+            if choice == "1":
+                mode = "direct"
+                break
+            elif choice == "2":
+                mode = "batch"
+                break
+            elif choice == "3":
+                # Manage checkpoint
+                checkpoint = load_checkpoint()
+                if not checkpoint or not checkpoint.get("json_path"):
+                    console.print(Panel(
+                        "[yellow]Không tìm thấy checkpoint nào[/yellow]\n\n"
+                        "[dim]Checkpoint sẽ được tạo tự động khi bạn chạy batch mode[/dim]",
+                        title="[bold cyan]Checkpoint Info[/bold cyan]",
+                        border_style="cyan"
+                    ))
+                else:
+                    import datetime
+                    json_path_saved = checkpoint.get("json_path", "")
+                    last_index = checkpoint.get("last_index", 0)
+                    total = checkpoint.get("total", 0)
+                    timestamp = checkpoint.get("timestamp", 0)
+                    time_saved = datetime.datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    console.print(Panel(
+                        f"[bold green]CHECKPOINT HIỆN TẠI[/bold green]\n\n"
+                        f"[cyan]File JSON:[/cyan] [dim]{json_path_saved}[/dim]\n"
+                        f"[cyan]Tiến độ:[/cyan] [green]{last_index}/{total}[/green] items đã xử lý\n"
+                        f"[cyan]Lần lưu cuối:[/cyan] [yellow]{time_saved}[/yellow]\n"
+                        f"[cyan]Item tiếp theo:[/cyan] #{last_index + 1}",
+                        border_style="green"
+                    ))
+                    
+                    clear_choice = console.input("\n[bold yellow]Bạn có muốn xóa checkpoint này? (y/n):[/bold yellow] ").strip().lower()
+                    if clear_choice == "y":
+                        clear_checkpoint()
+                        console.print("[green]✓ Đã xóa checkpoint[/green]")
+                    else:
+                        console.print("[cyan]Checkpoint được giữ nguyên[/cyan]")
+                
+                console.input("\n[dim]Nhấn Enter để quay lại menu...[/dim]")
+                console.print()
+                continue
+            elif choice == "4":
+                display_usage()
+                console.print()
+                # Quay lại menu chính, tiếp tục vòng lặp
+            else:
+                console.print("[bold red]Lựa chọn không hợp lệ![/bold red]")
+                console.input("\n[dim]Nhấn Enter để thử lại...[/dim]")
+                console.print()
+                continue
+    
+    # Handle batch mode
+    if mode == "batch":
+        json_path = args.json
+        while True:
+            if not json_path:
+                json_path = console.input("\n[bold cyan]Nhập đường dẫn file JSON:[/bold cyan] ").strip()
+            
+            if json_path and os.path.exists(json_path):
+                break
+            else:
+                console.print("[bold red]LỖI:[/bold red] File JSON không tồn tại! Vui lòng kiểm tra lại đường dẫn.")
+                json_path = None
+        
+        # --- Ask what files to save (same as direct mode) ---
+        has_save_flags = args.save_video or args.save_audio or args.save_vtt
+        
+        if has_save_flags:
+            save_video = args.save_video
+            save_audio = args.save_audio
+            save_vtt = args.save_vtt
+        else:
+            # Show save options menu
+            console.print("[bold yellow]CHỌN FILE CẦN LƯU[/bold yellow]")
+            
+            table = Table(box=box.ROUNDED, show_header=False, padding=(0, 2))
+            table.add_column(style="yellow", justify="center", width=4)
+            table.add_column(style="white", width=50)
+            
+            table.add_row("1", "[cyan]Lưu tất cả[/cyan] (Video + Audio + VTT)")
+            table.add_row("2", "[cyan]Chỉ lưu Video[/cyan]")
+            table.add_row("3", "[magenta]Chỉ lưu Audio[/magenta]")
+            table.add_row("4", "[yellow]Chỉ lưu VTT (Phụ đề)[/yellow]")
+            table.add_row("5", "[cyan]Video + Audio[/cyan]")
+            table.add_row("6", "[cyan]Video + VTT[/cyan]")
+            table.add_row("7", "[magenta]Audio + VTT[/magenta]")
+            table.add_row("8", "[blue]Chỉ tạo Thumbnails[/blue] (không lưu video/audio)")
+            
+            console.print(table)
+            
+            choice = console.input("[bold green]Nhập lựa chọn của bạn (1-8, mặc định 1):[/bold green] ").strip()
+            if not choice:
+                choice = "1"
+            
+            save_video = False
+            save_audio = False
+            save_vtt = False
+            only_thumbnails = False
+            
+            if choice == "1":
+                save_video = save_audio = save_vtt = True
+            elif choice == "2":
+                save_video = True
+            elif choice == "3":
+                save_audio = True
+            elif choice == "4":
+                save_vtt = True
+            elif choice == "5":
+                save_video = save_audio = True
+            elif choice == "6":
+                save_video = save_vtt = True
+            elif choice == "7":
+                save_audio = save_vtt = True
+            elif choice == "8":
+                only_thumbnails = True
+                args.create_thumbnails = True
+            else:
+                console.print("[yellow]Lựa chọn không hợp lệ, sẽ lưu tất cả file[/yellow]")
+                save_video = save_audio = save_vtt = True
+            
+            # Update args with selections
+            args.save_video = save_video
+            args.save_audio = save_audio
+            args.save_vtt = save_vtt
+            
+            # Display selections
+            files_to_save = []
+            if save_video:
+                files_to_save.append("[cyan]Video[/cyan]")
+            if save_audio:
+                files_to_save.append("[magenta]Audio[/magenta]")
+            if save_vtt:
+                files_to_save.append("[yellow]VTT (Phụ đề)[/yellow]")
+            if only_thumbnails or args.create_thumbnails:
+                files_to_save.append("[blue]Thumbnails[/blue]")
+            
+            if files_to_save:
+                console.print(f"[green]Sẽ lưu:[/green] {', '.join(files_to_save)}")
+            else:
+                console.print("[yellow]Không có file nào được chọn để lưu![/yellow]")
+                console.print("[dim]    (Video và Audio vẫn sẽ được tải về để xử lý, sau đó sẽ bị xóa)[/dim]")
+        
+        # --- Ask language for transcription (if needed) ---
+        language = args.language
+        need_transcription = args.save_vtt or (not args.save_video and not args.save_audio)
+        
+        if not language and need_transcription:
+            table = Table(title="[bold cyan]CHỌN NGÔN NGỮ NHẬN DẠNG[/bold cyan]", box=box.DOUBLE_EDGE, show_lines=False)
+            table.add_column("#", style="yellow", justify="center", width=4)
+            table.add_column("Ngôn ngữ", style="green", width=25)
+            table.add_column("Mã", style="cyan", justify="center", width=6)
+            
+            languages = [
+                ("1", "Tiếng Việt", "vi"),
+                ("2", "Tiếng Anh", "en"),
+                ("3", "Tiếng Nhật", "ja"),
+                ("4", "Tiếng Hàn", "ko"),
+                ("5", "Tiếng Trung", "zh"),
+                ("6", "Tiếng Thái", "th"),
+                ("7", "Tiếng Indonesia", "id"),
+                ("8", "Tự động nhận diện", "auto"),
+                ("0", "Nhập mã khác", "custom"),
+            ]
+            
+            for num, name, code in languages:
+                table.add_row(num, name, code if code not in ["auto", "custom"] else "")
+            
+            console.print("\n", table)
+            choice = console.input("[bold green]Nhập lựa chọn của bạn (mặc định 1):[/bold green] ").strip()
+            if not choice:
+                choice = "1"
+            
+            selected = next((lang for lang in languages if lang[0] == choice), None)
+            
+            if selected:
+                if selected[2] == "custom":
+                    language = console.input("[cyan]Nhập mã ngôn ngữ[/cyan] [dim](ví dụ: fr, de, es)[/dim]: ").strip() or None
+                    if language:
+                        console.print(f"[green]Đã chọn ngôn ngữ:[/green] [yellow]{language}[/yellow]")
+                elif selected[2] == "auto":
+                    language = None
+                    console.print("[green]Sẽ tự động nhận diện ngôn ngữ[/green]")
+                else:
+                    language = selected[2]
+                    console.print(f"[green]Đã chọn:[/green] [cyan]{selected[1]}[/cyan]")
+            else:
+                console.print("[yellow]Lựa chọn không hợp lệ, sẽ dùng auto-detect[/yellow]")
+                language = None
+            
+            args.language = language
+        
+        # --- Ask about thumbnails ---
+        create_thumbnails = args.create_thumbnails
+        thumbnail_interval = args.thumbnail_interval
+        thumb_width = args.thumb_width
+        thumb_height = args.thumb_height
+        thumb_cols = args.thumb_cols
+        thumb_format = args.thumb_format
+        cdn_url = args.cdn_url
+        
+        if not create_thumbnails:
+            create_thumb_choice = console.input("\n[bold cyan]Bạn có muốn tạo sprite sheet thumbnails từ video không?[/bold cyan] [dim](y/n, mặc định n)[/dim]: ").strip().lower()
+            if not create_thumb_choice:
+                create_thumb_choice = "n"
+            
+            if create_thumb_choice == "y":
+                create_thumbnails = True
+                
+                # Hỏi khoảng thời gian
+                interval_input = console.input(f"[cyan]Nhập khoảng thời gian giữa các thumbnail[/cyan] [dim](giây, mặc định {thumbnail_interval})[/dim]: ").strip()
+                if interval_input.isdigit() and int(interval_input) > 0:
+                    thumbnail_interval = int(interval_input)
+                
+                # Hỏi kích thước thumbnail
+                console.print(f"[blue]Kích thước mặc định:[/blue] [yellow]{thumb_width}x{thumb_height}px[/yellow]\n")
+                size_input = console.input("[cyan]Thay đổi kích thước?[/cyan] [dim](Nhấn Enter để giữ mặc định hoặc nhập 'w,h' ví dụ: 160,90)[/dim]: ").strip()
+                if size_input and "," in size_input:
+                    try:
+                        w, h = size_input.split(",")
+                        thumb_width = int(w.strip())
+                        thumb_height = int(h.strip())
+                        console.print(f"[green]Đã đặt kích thước:[/green] [yellow]{thumb_width}x{thumb_height}px[/yellow]")
+                    except:
+                        console.print(f"[yellow]Định dạng không hợp lệ, giữ mặc định {thumb_width}x{thumb_height}px[/yellow]")
+                
+                # Hỏi số cột
+                cols_input = console.input(f"[cyan]Số cột trong sprite sheet[/cyan] [dim](mặc định {thumb_cols})[/dim]: ").strip()
+                if cols_input.isdigit() and int(cols_input) > 0:
+                    thumb_cols = int(cols_input)
+                
+                # Hỏi định dạng ảnh
+                console.print(f"\n[bold cyan]Chọn định dạng ảnh:[/bold cyan]")
+                console.print(f"  [yellow]1.[/yellow] WebP [dim](nhẹ hơn, chất lượng tốt - khuyến nghị)[/dim]")
+                console.print(f"  [yellow]2.[/yellow] JPG [dim](tương thích rộng)[/dim]")
+                format_choice = console.input(f"[bold green]Chọn (1-2, mặc định 1):[/bold green] ").strip()
+                if format_choice == "2":
+                    thumb_format = "jpg"
+                else:
+                    thumb_format = "webp"
+                
+                # Hỏi CDN URL (tùy chọn)
+                cdn_input = console.input(f"[cyan]\nURL CDN cho sprite sheet[/cyan] [dim](Nhấn Enter để bỏ qua, ví dụ: https://cdn.example.com/)[/dim]: ").strip()
+                if cdn_input:
+                    cdn_url = cdn_input
+                
+                console.print(f"[green]Hệ thống sẽ tạo sprite sheet:[/green] [yellow]{thumb_cols} cột, {thumb_width}x{thumb_height}px, {thumb_format.upper()}, mỗi {thumbnail_interval}s[/yellow]")
+                if cdn_url:
+                    console.print(f"[green]Sử dụng CDN URL:[/green] [cyan]{cdn_url}[/cyan]")
+                
+                # Update args
+                args.create_thumbnails = create_thumbnails
+                args.thumbnail_interval = thumbnail_interval
+                args.thumb_width = thumb_width
+                args.thumb_height = thumb_height
+                args.thumb_cols = thumb_cols
+                args.thumb_format = thumb_format
+                args.cdn_url = cdn_url
+        
+        process_batch_from_json(json_path, args)
+        return
 
     # Nhập và validate URL
     m3u8_link = args.m3u8
