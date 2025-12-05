@@ -987,9 +987,10 @@ def _main() -> None:
             console.print("[yellow]Không có file nào được chọn để lưu![/yellow]")
             console.print("[dim]    (Video và Audio vẫn sẽ được tải về để xử lý, sau đó sẽ bị xóa)[/dim]")
 
-    # Menu chọn ngôn ngữ với Rich Table (bỏ qua nếu chỉ tạo thumbnails)
+    # Menu chọn ngôn ngữ với Rich Table (bỏ qua nếu không cần transcription)
     language = args.language
-    if not language and not only_thumbnails:
+    need_transcription = save_vtt or (not save_video and not save_audio and not only_thumbnails)
+    if not language and need_transcription and not only_thumbnails:
         table = Table(title="[bold cyan]CHỌN NGÔN NGỮ NHẬN DẠNG[/bold cyan]", box=box.DOUBLE_EDGE, show_lines=False)
         table.add_column("#", style="yellow", justify="center", width=4)
         table.add_column("Ngôn ngữ", style="green", width=25)
@@ -1108,16 +1109,16 @@ def _main() -> None:
     # Xử lý
     video = download_from_m3u8(m3u8_link, video_path)
     
-    # Nếu chỉ tạo thumbnails, bỏ qua audio và transcription
-    if only_thumbnails:
-        result = None
-    else:
+    # Chỉ xử lý audio và transcription nếu cần
+    if need_transcription and not only_thumbnails:
         audio = extract_audio(video, audio_path)
         result = transcribe_audio(audio, model_name=args.model, lang=language, use_gpu=use_gpu)
         
         # Lưu các file theo lựa chọn của người dùng
         if save_vtt:
             save_subtitles(result, vtt_path)
+    else:
+        result = None
     
     # Tạo sprite sheet thumbnails nếu được yêu cầu
     sprite_info = {}

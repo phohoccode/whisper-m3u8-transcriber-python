@@ -20,14 +20,15 @@ Công cụ tải video từ URL m3u8, tách âm thanh và nhận dạng giọng 
 - Tách âm thanh từ video (WAV 16kHz mono)
 - Nhận dạng giọng nói bằng Whisper (hỗ trợ 99+ ngôn ngữ)
 - Xuất phụ đề VTT
-- **Chọn lựa file cần lưu**: Video, Audio, VTT hoặc bất kỳ tổ hợp nào
+- **Chọn lựa file cần lưu**: Video, Audio, VTT, Thumbnails hoặc bất kỳ tổ hợp nào (8 options)
 - **Nhóm file vào thư mục mới**: Tự động hoặc đặt tên tuỳ chỉnh
 - **Giao diện Rich Console**: Progress bars, status indicators, bảng đẹp với màu sắc gradient
 - Hỗ trợ menu tương tác: chọn ngôn ngữ, chọn mô hình Whisper
-- Tự động nhận diện ngôn ngữ
+- Tự động nhận diện ngôn ngữ (hoặc chỉ định cụ thể)
 - **Tạo Sprite Sheet Thumbnails**: Tạo hình ảnh sprite sheet từ video, hỗ trợ WebP và JPG
 - **VTT cho Sprite Sheet**: Tự động tạo file VTT kèm tọa độ sprite (xywh)
 - **Tối ưu Whisper**: Các tham số tối ưu để cải thiện độ chính xác và xử lý âm thanh có nhạc nền
+- **Tối ưu xử lý**: Bỏ qua bước transcription khi không cần thiết (chỉ lưu video/audio/thumbnails)
 
 ---
 
@@ -117,9 +118,9 @@ Script sẽ hiển thị logo ASCII art với gradient màu sắc, sau đó hỏ
 1. URL m3u8 hoặc đường dẫn file
 2. Thư mục lưu trữ (hiện tại, chọn từ lịch sử, hoặc tuỳ chỉnh)
 3. Có nhóm file vào thư mục con mới không (nhập tên thư mục)
-4. **Chọn file nào cần lưu**: Video, Audio, VTT hoặc tất cả (7 tùy chọn)
+4. **Chọn file nào cần lưu**: Video, Audio, VTT, Thumbnails hoặc tất cả (8 tùy chọn)
 5. Có tạo sprite sheet thumbnails không (tùy chọn)
-6. Chọn ngôn ngữ nhận dạng từ bảng (9 ngôn ngữ phổ biến + tùy chỉnh)
+6. Chọn ngôn ngữ nhận dạng từ bảng (chỉ khi cần transcription - 9 ngôn ngữ phổ biến + tùy chỉnh)
 
 **Giao diện Rich Console bao gồm:**
 
@@ -353,18 +354,19 @@ Bạn có muốn nhóm 3 file (video/audio/vtt) vào thư mục mới không? (y
 Nhập tên thư mục nhóm (để trống sẽ dùng tên theo thời điểm): my_video
 
 CHỌN FILE CẦN LƯU
-┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ # ┃ Tùy chọn                         ┃
-┣━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
-┃ 1 ┃ Video + Audio + VTT (lưu tất cả) ┃
-┃ 2 ┃ Chỉ Video                        ┃
-┃ 3 ┃ Chỉ Audio                        ┃
-┃ 4 ┃ Chỉ VTT (Phụ đề)                 ┃
-┃ 5 ┃ Video + Audio                    ┃
-┃ 6 ┃ Video + VTT                      ┃
-┃ 7 ┃ Audio + VTT                      ┃
-┗━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-Nhập lựa chọn (1-7): 1
+┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ # ┃ Tùy chọn                                           ┃
+┣━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ 1 ┃ Video + Audio + VTT (lưu tất cả)                   ┃
+┃ 2 ┃ Video                                              ┃
+┃ 3 ┃ Audio                                              ┃
+┃ 4 ┃ VTT (Phụ đề)                                       ┃
+┃ 5 ┃ Video + Audio                                      ┃
+┃ 6 ┃ Video + VTT                                        ┃
+┃ 7 ┃ Audio + VTT                                        ┃
+┃ 8 ┃ Thumbnails (ảnh thumbnail + sprite sheet)          ┃
+┗━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+Nhập lựa chọn (1-8, mặc định 1): 1
 
 Bạn có muốn tạo sprite sheet thumbnails từ video không? (y/N): y
 Nhập khoảng thời gian giữa các thumbnail (giây, mặc định 5): 5
@@ -376,7 +378,7 @@ Chọn định dạng ảnh:
 Chọn (1-2, mặc định 1): 1
 URL CDN cho sprite sheet (Nhấn Enter để bỏ qua):
 
-CHỌN NGÔN NGỮ NHẬN DẠNG
+CHỌN NGÔN NGỮ NHẬN DẠNG (Chỉ hiển thị khi cần transcription)
 ┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━┓
 ┃ # ┃ Ngôn ngữ                ┃ Mã   ┃
 ┣━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━━━┫
@@ -390,7 +392,7 @@ CHỌN NGÔN NGỮ NHẬN DẠNG
 ┃ 8 ┃ Tự động nhận diện       ┃      ┃
 ┃ 0 ┃ Nhập mã khác            ┃      ┃
 ┗━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━┻━━━━━━┛
-Nhập lựa chọn của bạn: 1
+Nhập lựa chọn của bạn (mặc định 1): 1
 ```
 
 ---
@@ -473,9 +475,11 @@ E:/Sprites/
   - `no_speech_threshold=0.6`: Lọc nhạc/noise tốt hơn
   - `compression_ratio_threshold=2.4`: Phát hiện lỗi tốt hơn
 
-### 3. Tiết kiệm dung lượng
+### 3. Tiết kiệm dung lượng và thời gian
 
 - Chỉ lưu VTT nếu bạn chỉ cần phụ đề: `--save-vtt`
+- Chỉ lưu Video nếu không cần transcription: `--save-video` (bỏ qua bước nhận dạng giọng nói)
+- Chỉ tạo thumbnails mà không cần transcription: chọn option 8 trong menu
 - Sử dụng WebP cho sprite sheet (nhẹ hơn JPG ~40%)
 
 ### 4. Xử lý hàng loạt
@@ -598,4 +602,24 @@ Dự án này sử dụng:
 
 ---
 
-**Lần cập nhật cuối**: 22 tháng 11 năm 2025
+**Lần cập nhật cuối**: 05 tháng 12 năm 2025
+
+---
+
+## Changelog
+
+### v1.1.0 (05/12/2025)
+
+- **[Feature]** Thêm option 8: Chỉ tạo thumbnails mà không cần transcription
+- **[Feature]** Tự động bỏ qua bước chọn ngôn ngữ khi không cần transcription (option 2, 3, 5, 8)
+- **[Improvement]** Cải thiện UI consistency với default values cho các prompts
+- **[Fix]** Sửa lỗi UnboundLocalError khi KeyboardInterrupt trong quá trình tạo thumbnails
+- **[Refactor]** Tối ưu logic xử lý: chỉ tách audio và transcription khi thực sự cần thiết
+
+### v1.0.0 (03/12/2025)
+
+- Release đầu tiên với đầy đủ tính năng
+- Hỗ trợ tải video từ m3u8
+- Nhận dạng giọng nói bằng Whisper
+- Tạo sprite sheet thumbnails
+- Giao diện Rich Console với progress bars
