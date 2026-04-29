@@ -8,16 +8,18 @@ Công cụ tải video từ URL m3u8, tách âm thanh và nhận dạng giọng 
 2. [Yêu cầu hệ thống](#yêu-cầu-hệ-thống)
 3. [Cài đặt](#cài-đặt)
 4. [Cách sử dụng](#cách-sử-dụng)
-5. [Các tuỳ chọn dòng lệnh](#các-tuỳ-chọn-dòng-lệnh)
-6. [Sprite Sheet Thumbnails](#sprite-sheet-thumbnails)
-7. [Ví dụ sử dụng](#ví-dụ-sử-dụng)
-8. [Mẹo sử dụng](#mẹo-sử-dụng)
-9. [Xử lý sự cố](#xử-lý-sự-cố)
-10. [Cấu trúc kết quả](#cấu-trúc-kết-quả)
-11. [Các tài liệu liên quan](#các-tài-liệu-liên-quan)
-12. [Tính năng Rich Console](#tính-năng-rich-console)
-13. [License](#license)
-14. [Changelog](#changelog)
+   - [Cách 1: Menu Tương tác](#-cách-1-sử-dụng-menu-tương-tác-khuyến-nghị-cho-người-mới)
+   - [Cách 2: Giao diện GUI](#-cách-2-sử-dụng-giao-diện-gui-windows)
+   - [Cách 3: Command Line (CLI)](#-cách-3-sử-dụng-command-line-interface-cli)
+5. [Sprite Sheet Thumbnails](#sprite-sheet-thumbnails)
+6. [Ví dụ sử dụng chi tiết](#ví-dụ-sử-dụng-chi-tiết)
+7. [Mẹo sử dụng](#mẹo-sử-dụng)
+8. [Xử lý sự cố](#xử-lý-sự-cố)
+9. [Cấu trúc kết quả](#cấu-trúc-kết-quả)
+10. [Các tài liệu liên quan](#các-tài-liệu-liên-quan)
+11. [Tính năng Rich Console](#tính-năng-rich-console)
+12. [License](#license)
+13. [Changelog](#changelog)
 
 ---
 
@@ -79,7 +81,6 @@ Tải từ [python.org](https://www.python.org/downloads/). Chọn Python 3.8 tr
 1. Tải FFmpeg từ [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) (chọn **Full** release)
 2. Giải nén vào thư mục (ví dụ: `C:\ffmpeg`)
 3. Thêm vào PATH:
-
    - Mở "Edit environment variables for your account"
    - Tìm PATH, click "Edit"
    - Click "New" và thêm `C:\ffmpeg\bin`
@@ -125,7 +126,17 @@ pip install openai-whisper rich
 
 ## Cách sử dụng
 
-### Cách chạy đơn giản nhất (Menu tương tác)
+Công cụ này hỗ trợ **2 cách sử dụng chính**:
+
+1. **CLI Mode** - Sử dụng command line với các flags
+2. **Interactive Menu Mode** - Menu tương tác dòng lệnh với giao diện đẹp
+3. **GUI Mode** - Giao diện đồ họa (Windows)
+
+---
+
+## 📋 Cách 1: Sử dụng Menu Tương Tác (Khuyến nghị cho người mới)
+
+### Chạy menu tương tác
 
 ```powershell
 python .\main.py
@@ -134,52 +145,179 @@ python .\main.py
 Script sẽ hiển thị logo ASCII art với gradient màu sắc và menu chính:
 
 ```
-1. Nhập link trực tiếp (Direct Mode)
-2. Xử lý theo file JSON (Batch Mode)
-3. Quản lý checkpoint (xem/xóa checkpoint đã lưu)
-4. Hướng dẫn sử dụng (hiển thị help chi tiết)
+╔═════════════════════════════════════════╗
+║  WHISPER M3U8 TRANSCRIBER (v1.2.0)      ║
+║  Tải video m3u8 → Nhận dạng giọng nói   ║
+╚═════════════════════════════════════════╝
+
+MENU CHÍNH:
+┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ # ┃ Tùy chọn                           ┃
+┣━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ 1 ┃ Nhập link trực tiếp (Direct Mode)  ┃
+┃ 2 ┃ Xử lý theo file JSON (Batch Mode)  ┃
+┃ 3 ┃ Quản lý checkpoint                 ┃
+┃ 4 ┃ Hướng dẫn sử dụng                  ┃
+┗━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
 
-#### Chế độ Direct (xử lý 1 video)
+### Tùy chọn 1: Direct Mode (Xử lý 1 video)
 
-1. Chọn chế độ `1` từ menu chính
-2. Nhập URL m3u8
-3. Chọn thư mục lưu trữ:
-   - Thư mục hiện tại
-   - Chọn từ lịch sử đã dùng (lưu trong `.whisper_m3u8_transcriber_config.json`)
-   - Nhập đường dẫn tùy chỉnh
-4. Có nhóm file vào thư mục con mới không (nhập tên thư mục hoặc để trống dùng timestamp)
-5. **Chọn file nào cần lưu** (8 tùy chọn):
-   - 1: Video + Audio + VTT (lưu tất cả)
-   - 2: Chỉ Video
-   - 3: Chỉ Audio
-   - 4: Chỉ VTT (Phụ đề)
-   - 5: Video + Audio
-   - 6: Video + VTT
-   - 7: Audio + VTT
-   - 8: Chỉ Thumbnails (không lưu video/audio)
-6. Có tạo sprite sheet thumbnails không (y/n)
-   - Nếu có: hỏi interval, kích thước, số cột, định dạng (webp/jpg), CDN URL
-7. Chọn ngôn ngữ nhận dạng (chỉ khi cần transcription - option 1,4,6,7):
-   - 1-7: Ngôn ngữ phổ biến (vi, en, ja, ko, zh, th, id)
-   - 8: Tự động nhận diện
-   - 0: Nhập mã khác
+**Quy trình chi tiết:**
 
-#### Chế độ Batch (xử lý nhiều video)
+1. **Nhập URL m3u8**
 
-1. Chọn chế độ `2` từ menu chính
-2. Nhập đường dẫn file JSON (ví dụ: `input.json` hoặc `input_example.txt`)
-3. Hệ thống tự động kiểm tra checkpoint:
-   - Nếu có checkpoint với cùng file JSON, hỏi có muốn tiếp tục không
-   - Hiển thị tiến độ đã xử lý (ví dụ: 5/10 items) và thời gian lưu cuối
-4. **Chọn file nào cần lưu** (8 tùy chọn - giống Direct Mode)
-5. **Chọn ngôn ngữ** (chỉ khi cần transcription)
-6. **Cấu hình thumbnails** (nếu muốn)
-7. Chọn chạy đến item thứ mấy (Enter để chạy hết, hoặc nhập số để dừng sớm)
-8. Xử lý tự động từng item theo thứ tự
-9. Sau mỗi item thành công, checkpoint được lưu tự động
+   ```
+   Nhập link .m3u8: https://example.com/stream.m3u8
+   ```
+
+2. **Chọn nơi lưu trữ**
+
+   ```
+   Chọn nơi lưu trữ:
+   1. Thư mục hiện tại (E:\Project\whisper-m3u8-transcriber)
+   2. Chọn từ các đường dẫn đã dùng trước
+   3. Nhập đường dẫn tùy chỉnh
+   Chọn (1-3, mặc định 1):
+   ```
+
+   - **Option 1**: Lưu trong thư mục script đang chạy
+   - **Option 2**: Hiển thị danh sách các thư mục đã dùng gần đây (lưu trong `.whisper_m3u8_transcriber_config.json`)
+   - **Option 3**: Nhập đường dẫn tùy ý, ví dụ: `E:\MyVideos`
+
+3. **Chọn nhóm file vào thư mục con**
+
+   ```
+   Bạn có muốn nhóm các file (video/audio/vtt) vào thư mục con không? (y/N): y
+   Nhập tên thư mục nhóm (để trống sẽ dùng tên theo thời điểm): my_video
+   ```
+
+   - **Có (y)**: Tạo thư mục con để nhóm các file
+   - **Không (n)**: Lưu trực tiếp vào output directory
+   - Để trống → Script tự tạo tên theo timestamp: `group_20251205_143022/`
+
+4. **Chọn file cần lưu** (8 tùy chọn)
+
+   ```
+   ┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+   ┃ # ┃ Tùy chọn                                           ┃
+   ┣━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+   ┃ 1 ┃ Video + Audio + VTT (lưu tất cả) ⭐ Khuyến nghị     ┃
+   ┃ 2 ┃ Chỉ Video                                          ┃
+   ┃ 3 ┃ Chỉ Audio (WAV)                                    ┃
+   ┃ 4 ┃ Chỉ VTT (Phụ đề)                                   ┃
+   ┃ 5 ┃ Video + Audio                                      ┃
+   ┃ 6 ┃ Video + VTT                                        ┃
+   ┃ 7 ┃ Audio + VTT                                        ┃
+   ┃ 8 ┃ Thumbnails (sprite sheet mà không cần video/audio) ┃
+   ┗━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+   Nhập lựa chọn (1-8, mặc định 1):
+   ```
+
+   - **1**: Lưu video (MP4) + audio (WAV) + phụ đề (VTT) - Dùng khi cần đầy đủ
+   - **2**: Chỉ lưu video (bỏ qua transcription để tiết kiệm thời gian)
+   - **3**: Chỉ lưu audio WAV (16kHz mono)
+   - **4**: Chỉ lưu VTT (chỉ cần phụ đề)
+   - **8**: Chỉ tạo sprite sheet thumbnails (không cần video/audio)
+
+5. **Cấu hình Sprite Sheet Thumbnails** (nếu chọn option có thumbnails)
+
+   ```
+   Bạn có muốn tạo sprite sheet thumbnails từ video không? (y/N): y
+   ```
+
+   - **Khoảng cách** (Interval)
+
+     ```
+     Nhập khoảng thời gian giữa các thumbnail (giây, mặc định 5): 3
+     ```
+
+     - 2-3 giây: Chi tiết cao, file lớn
+     - 5 giây: Cân bằng (khuyến nghị)
+     - 10+ giây: Ít thumbnails, file nhẹ
+
+   - **Kích thước** (Size)
+
+     ```
+     Thay đổi kích thước? (Nhấn Enter để giữ 160,90 hoặc nhập 'w,h' ví dụ: 160,90):
+     ```
+
+     - Để trống: Dùng mặc định 160x90px
+     - Nhập: 120,68 hoặc 200,112
+
+   - **Số cột** (Columns)
+
+     ```
+     Số cột trong sprite sheet (mặc định 10): 8
+     ```
+
+     - Ảnh được xếp thành lưới (cols × rows)
+     - 10 cột: 1600px rộng (với thumbnail 160px)
+
+   - **Định dạng ảnh** (Format)
+
+     ```
+     Chọn định dạng ảnh:
+       1. WebP (nhẹ hơn 40%, khuyến nghị) ⭐
+       2. JPG (tương thích rộng)
+     Chọn (1-2, mặc định 1):
+     ```
+
+     - **WebP**: Nhẹ hơn, tối ưu cho web modern
+     - **JPG**: Tương thích trình duyệt cũ
+
+   - **CDN URL** (Tùy chọn)
+
+     ```
+     URL CDN cho sprite sheet (Nhấn Enter để bỏ qua):
+     ```
+
+     - Nhập: Dùng URL CDN trong VTT file
+     - Để trống: Dùng đường dẫn tương đối
+
+6. **Chọn ngôn ngữ** (chỉ hiển thị nếu chọn option có transcription)
+
+   ```
+   ┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━┓
+   ┃ # ┃ Ngôn ngữ                ┃ Mã   ┃
+   ┣━━━╋━━━━━━━━━━━━━━━━━━━━━━━━━╋━━━━━━┫
+   ┃ 1 ┃ Tiếng Việt              ┃ vi   ┃
+   ┃ 2 ┃ Tiếng Anh               ┃ en   ┃
+   ┃ 3 ┃ Tiếng Nhật              ┃ ja   ┃
+   ┃ 4 ┃ Tiếng Hàn               ┃ ko   ┃
+   ┃ 5 ┃ Tiếng Trung             ┃ zh   ┃
+   ┃ 6 ┃ Tiếng Thái              ┃ th   ┃
+   ┃ 7 ┃ Tiếng Indonesia         ┃ id   ┃
+   ┃ 8 ┃ Tự động nhận diện       ┃      ┃
+   ┃ 0 ┃ Nhập mã ngôn ngữ khác   ┃      ┃
+   ┗━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━┻━━━━━━┛
+   Nhập lựa chọn (mặc định 1):
+   ```
+
+   - **1-7**: Chọn ngôn ngữ phổ biến
+   - **8**: Để Whisper tự động phát hiện (chậm hơn, có thể sai)
+   - **0**: Nhập mã ISO 639-1 khác (ví dụ: `ru`, `es`, `fr`)
+
+7. **Xử lý bắt đầu**
+
+   ```
+   🔄 Đang tải video...
+   [████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 45% | 00:15 < 00:20
+
+   🎵 Đang tách âm thanh...
+   ✓ Hoàn tất tách âm thanh
+
+   🎤 Đang nhận dạng giọng nói (model: small)...
+   [████████████████████████████████████████████████████] 100% | 00:32
+
+   ✅ Xử lý hoàn tất!
+   ```
+
+### Tùy chọn 2: Batch Mode (Xử lý nhiều video)
 
 **Cấu trúc file JSON:**
+
+Tạo file `input.json`:
 
 ```json
 {
@@ -194,63 +332,755 @@ Script sẽ hiển thị logo ASCII art với gradient màu sắc và menu chín
       "slug": "video-002",
       "m3u8_url": "https://example.com/stream2.m3u8",
       "folder_name": "video-phần-2"
+    },
+    {
+      "slug": "video-003",
+      "m3u8_url": "https://example.com/stream3.m3u8",
+      "folder_name": "video-phần-3"
     }
   ]
 }
 ```
 
+**Các field bắt buộc:**
+
 - `root_path`: Thư mục gốc (ví dụ: `E:\Videos\Subtitles`)
-- `slug`: Tên thư mục con (sẽ ghép với root_path)
-- `m3u8_url`: URL của video m3u8
-- `folder_name`: Tên thư mục nhóm file (tương đương --group-name)
+- `items[]`: Mảng video cần xử lý
+  - `slug`: Tên thư mục con
+  - `m3u8_url`: URL m3u8 của video
+  - `folder_name`: Tên thư mục nhóm file
 
-**Đường dẫn cuối cùng:** `{root_path}\{slug}\{folder_name}\`
+**Đường dẫn cuối cùng**: `{root_path}\{slug}\{folder_name}\`
 
-**Ví dụ:** `E:\Videos\Subtitles\video-001\video-phần-1\`
+**Ví dụ**: `E:\Videos\Subtitles\video-001\video-phần-1\`
 
-**Checkpoint System:**
+**Quy trình Batch Mode:**
 
-- Tự động lưu tiến trình sau mỗi item thành công vào file `.whisper_m3u8_transcriber_checkpoint.json` (trong thư mục hiện tại)
-- Khi bị gián đoạn (Ctrl+C), checkpoint được lưu lại ngay lập tức
-- Lần chạy tiếp theo với cùng file JSON sẽ hỏi có muốn tiếp tục không
-- Có thể chọn bắt đầu lại từ đầu hoặc tiếp tục từ item cuối cùng
-- Menu chính có option "Quản lý checkpoint" để xem và xóa checkpoint
+1. **Chọn option 2** từ menu chính
+2. **Nhập đường dẫn file JSON**
 
-**Giao diện Rich Console bao gồm:**
+   ```
+   Nhập đường dẫn file JSON: input.json
+   ```
 
-- Progress bars với spinner và thời gian thực cho download, extract, transcribe
-- Tables đẹp với border styles cho menu lựa chọn
-- Panels màu sắc cho thông báo lỗi và cảnh báo
-- Status indicators với animation
-- Gradient colors cho text và ASCII art
+   - Tên file (nếu cùng thư mục): `input.json`
+   - Đường dẫn đầy đủ: `D:\Projects\input.json`
+
+3. **Kiểm tra Checkpoint** (nếu có)
+
+   ```
+   ⚠️  Tìm thấy checkpoint từ lần chạy trước
+   File: input.json
+   Đã xử lý: 5/10 items
+   Lần cuối: 2025-12-05 14:30:23
+
+   Bạn có muốn tiếp tục từ item #6 không? (y/N): y
+   ```
+
+   - **y**: Tiếp tục từ item đã dừng
+   - **n**: Bắt đầu lại từ đầu
+
+4. **Chọn file cần lưu, ngôn ngữ, thumbnails** (giống Direct Mode)
+
+5. **Chọn xử lý đến item thứ mấy**
+
+   ```
+   Tổng cộng 10 items sẽ được xử lý
+   Nhập số item cần xử lý (Enter để xử lý hết, hoặc nhập số, ví dụ: 5):
+   ```
+
+   - **Để trống**: Xử lý hết 10 items
+   - **Nhập số**: Chỉ xử lý đến item thứ 5 (Items 0-4)
+
+6. **Xử lý tự động**
+
+   ```
+   Đang xử lý 10 items...
+
+   [1/10] 🎬 video-001 (video-phần-1)
+   ✓ Hoàn tất
+
+   [2/10] 🎬 video-002 (video-phần-2)
+   ✓ Hoàn tất
+
+   ...
+
+   ✅ Xử lý batch hoàn tất! (10/10)
+   ```
+
+   - Sau mỗi item thành công, checkpoint được lưu tự động
+   - Có thể nhấn Ctrl+C bất cứ lúc nào, checkpoint sẽ được giữ lại
+
+### Tùy chọn 3: Quản lý Checkpoint
+
+```
+Checkpoint Management:
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                                                 ┃
+┃ 📁 File JSON: input.json                        ┃
+┃ 📊 Tiến độ: 5/10 items                          ┃
+┃ ⏱️  Thời gian: 2025-12-05 14:30:23              ┃
+┃                                                 ┃
+┃ [1] Xóa checkpoint                              ┃
+┃ [2] Quay lại menu                               ┃
+┃                                                 ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
+
+### Tùy chọn 4: Hướng dẫn sử dụng
+
+Hiển thị full hướng dẫn với định dạng Rich Console đẹp mắt bao gồm các ví dụ, bảng, panels.
 
 ---
 
-## Các tuỳ chọn dòng lệnh
+## 🖥️ Cách 2: Sử dụng Giao Diện GUI (Windows)
 
-| Tuỳ chọn               | Mô tả                              | Ví dụ                                                        |
-| ---------------------- | ---------------------------------- | ------------------------------------------------------------ |
-| `--mode`               | Chế độ xử lý                       | `--mode "direct"` hoặc `--mode "batch"`                      |
-| `--json`               | Đường dẫn file JSON (batch mode)   | `--json "input.json"`                                        |
-| `--m3u8`               | URL m3u8 hoặc đường dẫn file       | `--m3u8 "https://example.com/video.m3u8"`                    |
-| `--output-dir`         | Thư mục lưu trữ                    | `--output-dir "E:\Videos"`                                   |
-| `--group-name`         | Tên thư mục nhóm file (tuỳ chọn)   | `--group-name "bai_hoc_1"`                                   |
-| `--language`           | Mã ngôn ngữ (ISO 639-1)            | `--language "vi"` (Việt), `--language "en"` (Anh)            |
-| `--model`              | Mô hình Whisper                    | `--model "tiny"`, `"base"`, `"small"`, `"medium"`, `"large"` |
-| `--output-prefix`      | Tiền tố tên file                   | `--output-prefix "movie"` → `movie_vi.vtt`                   |
-| `--save-video`         | Lưu file video                     | Không có value, chỉ cần thêm flag                            |
-| `--save-audio`         | Lưu file audio (WAV)               | Không có value, chỉ cần thêm flag                            |
-| `--save-vtt`           | Lưu file phụ đề (VTT)              | Không có value, chỉ cần thêm flag                            |
-| `--create-thumbnails`  | Tạo sprite sheet thumbnails        | Không có value, chỉ cần thêm flag                            |
-| `--thumbnail-interval` | Khoảng cách giữa thumbnails (giây) | `--thumbnail-interval 5` (mặc định: 5)                       |
-| `--thumb-width`        | Chiều rộng mỗi thumbnail (px)      | `--thumb-width 160` (mặc định: 160)                          |
-| `--thumb-height`       | Chiều cao mỗi thumbnail (px)       | `--thumb-height 90` (mặc định: 90)                           |
-| `--thumb-cols`         | Số cột trong sprite sheet          | `--thumb-cols 10` (mặc định: 10)                             |
-| `--thumb-format`       | Định dạng ảnh sprite sheet         | `--thumb-format "webp"` hoặc `"jpg"` (mặc định: webp)        |
-| `--cdn-url`            | URL CDN cho sprite sheet           | `--cdn-url "https://cdn.example.com/sprite.webp"`            |
-| `--no-gpu`             | Bắt buộc dùng CPU thay vì GPU      | Không có value, chỉ cần thêm flag                            |
+GUI cung cấp trải nghiệm người dùng thân thiện, không cần sử dụng dòng lệnh.
 
-**Ghi chú**: Nếu bạn cung cấp các flag `--save-*`, script sẽ **chỉ lưu những file bạn chỉ định**. Nếu không cung cấp, script sẽ hỏi qua menu.
+### Chạy ứng dụng GUI
+
+```powershell
+python .\main_gui.py
+```
+
+Cửa sổ ứng dụng sẽ mở ra với giao diện modern (CustomTkinter):
+
+```
+┌─────────────────────────────────────────────┐
+│  Whisper M3U8 Transcriber - GUI             │
+├─────────────────────────────────────────────┤
+│                                             │
+│  📋 INPUT SETTINGS                          │
+│  ┌─────────────────────────────────────────┐
+│  │ URL/Path: [________________]             │
+│  │ Mode:     ○ Direct  ● Batch             │
+│  │                                         │
+│  │ [Browse] [Paste]                       │
+│  └─────────────────────────────────────────┘
+│                                             │
+│  💾 OUTPUT SETTINGS                         │
+│  ┌─────────────────────────────────────────┐
+│  │ Output Dir: [______________]            │
+│  │ Group Folder: [______________]          │
+│  │ [Browse]                               │
+│  └─────────────────────────────────────────┘
+│                                             │
+│  📁 FILE OPTIONS                            │
+│  ┌─────────────────────────────────────────┐
+│  │ ☑ Save Video      ☑ Save Audio         │
+│  │ ☑ Save VTT        ☐ Create Thumbnails  │
+│  └─────────────────────────────────────────┘
+│                                             │
+│  🎬 THUMBNAILS CONFIG                       │
+│  ┌─────────────────────────────────────────┐
+│  │ Interval: [5] seconds                  │
+│  │ Size: [160] x [90] pixels              │
+│  │ Cols: [10]  Format: [WebP ▼]           │
+│  │ CDN URL: [______________]              │
+│  └─────────────────────────────────────────┘
+│                                             │
+│  🌐 LANGUAGE & MODEL                        │
+│  ┌─────────────────────────────────────────┐
+│  │ Language: [Tiếng Việt ▼]               │
+│  │ Model:    [small ▼]                    │
+│  │ GPU: [Auto ▼]                          │
+│  └─────────────────────────────────────────┘
+│                                             │
+│  [Start] [Stop] [Clear Checkpoint]         │
+│                                             │
+│  📊 STATUS & LOG                            │
+│  ┌─────────────────────────────────────────┐
+│  │ Status: Ready                           │
+│  │ Progress: 45% [████░░░░░░] 00:15       │
+│  │                                         │
+│  │ Log Output:                             │
+│  │ ✓ GPU detected: NVIDIA RTX 3060        │
+│  │ 🔄 Downloading video...                 │
+│  │ 🎵 Extracting audio...                  │
+│  │ 🎤 Transcribing...                      │
+│  └─────────────────────────────────────────┘
+│                                             │
+└─────────────────────────────────────────────┘
+```
+
+### Các bước sử dụng GUI chi tiết
+
+#### 1. **INPUT SETTINGS - Nhập nguồn dữ liệu**
+
+**Mode - Chế độ:**
+
+- **Direct**: Xử lý một URL m3u8
+- **Batch**: Xử lý file JSON với nhiều URL
+
+**Input URL/Path:**
+
+- **Direct Mode**: Nhập URL m3u8 hoặc dán từ clipboard
+  ```
+  https://example.com/stream.m3u8
+  ```
+- **Batch Mode**: Chọn file JSON
+  - Click [Browse]: Chọn file `input.json`
+  - Hoặc paste đường dẫn file
+
+**Các nút hỗ trợ:**
+
+- **[Browse]**: Mở file dialog để chọn
+- **[Paste]**: Dán từ clipboard
+
+#### 2. **OUTPUT SETTINGS - Cấu hình đầu ra**
+
+**Output Directory - Thư mục lưu trữ:**
+
+- Click [Browse] để chọn thư mục
+- Hoặc nhập đường dẫn trực tiếp
+- Ví dụ: `E:\Videos\Subtitles`
+
+**Group Folder - Tên thư mục nhóm (tùy chọn):**
+
+- Để trống: Script tự tạo tên theo timestamp (`group_20251205_143022`)
+- Nhập tên: `my_video`, `lesson_1`, v.v.
+
+#### 3. **FILE OPTIONS - Chọn file cần lưu**
+
+Các checkbox để chọn file cần lưu:
+
+- **☑ Save Video**: Lưu file video (MP4)
+- **☑ Save Audio**: Lưu file audio (WAV 16kHz mono)
+- **☑ Save VTT**: Lưu file phụ đề (VTT)
+- **☐ Create Thumbnails**: Tạo sprite sheet thumbnails
+
+**Ví dụ tổ hợp:**
+
+- ☑☑☑☐: Video + Audio + VTT (đầy đủ)
+- ☑☐☑☐: Video + VTT
+- ☐☐☑☐: Chỉ VTT (tiết kiệm dung lượng)
+- ☐☐☐☑: Chỉ Thumbnails
+
+#### 4. **THUMBNAILS CONFIG - Cấu hình Sprite Sheet**
+
+Chỉ hoạt động khi ☑ Create Thumbnails được chọn.
+
+**Interval - Khoảng cách (giây):**
+
+- Mặc định: 5
+- Gợi ý: 2-3 (chi tiết), 5 (cân bằng), 10+ (ít thumbnails)
+
+**Size - Kích thước (pixels):**
+
+- Chiều rộng (Width): Mặc định 160px
+- Chiều cao (Height): Mặc định 90px
+- Ví dụ: 120x68, 160x90, 200x112
+
+**Cols - Số cột trong sprite:**
+
+- Mặc định: 10
+- Ví dụ: 8, 10, 12 (ảnh xếp theo cột)
+
+**Format - Định dạng ảnh:**
+
+- **WebP** (khuyến nghị): Nhẹ ~40% so với JPG
+- **JPG**: Tương thích rộng
+
+**CDN URL - URL CDN (tùy chọn):**
+
+- Để trống: Dùng đường dẫn tương đối
+- Nhập: URL CDN đầy đủ
+  ```
+  https://cdn.example.com/videos/sprite.webp
+  ```
+
+#### 5. **LANGUAGE & MODEL - Chọn ngôn ngữ và mô hình**
+
+**Language - Ngôn ngữ nhận dạng:**
+Dropdown chứa danh sách ngôn ngữ:
+
+- Tiếng Việt (vi)
+- Tiếng Anh (en)
+- Tiếng Nhật (ja)
+- Tiếng Hàn (ko)
+- Tiếng Trung (zh)
+- Tiếng Thái (th)
+- Tiếng Indonesia (id)
+- Auto Detect (tự động - chậm hơn)
+
+**Model - Mô hình Whisper:**
+
+- **tiny**: Nhanh nhất, chất lượng thấp (~39MB)
+- **base**: Nhanh, chất lượng trung bình (~140MB)
+- **small**: Cân bằng ⭐ (khuyến nghị) (~466MB)
+- **medium**: Chậm, chất lượng tốt (~1.5GB)
+- **large**: Chậm nhất, chất lượng tốt nhất (~2.9GB)
+
+**GPU - Tăng tốc:**
+
+- **Auto**: Script tự phát hiện GPU
+- **CPU**: Bắt buộc dùng CPU
+- **CUDA**: Dùng NVIDIA GPU (nếu có)
+
+#### 6. **Nút điều khiển**
+
+- **[Start]**: Bắt đầu xử lý
+  - Chuyển sang trạng thái "Processing"
+  - Hiển thị progress bar
+  - Lock các setting controls
+- **[Stop]**: Dừng xử lý hiện tại
+  - Chỉ hoạt động khi đang xử lý
+  - Giữ lại checkpoint (batch mode)
+- **[Clear Checkpoint]**: Xóa checkpoint
+  - Xóa file `.whisper_m3u8_transcriber_checkpoint.json`
+  - Hỏi confirm trước xóa
+
+#### 7. **STATUS & LOG - Trạng thái và Nhật ký**
+
+**Status Line:**
+
+```
+Status: Ready
+Status: Validating inputs...
+Status: GPU detected - NVIDIA RTX 3060
+Status: Downloading video... (45%)
+Status: Extracting audio...
+Status: Transcribing with model small...
+Status: Creating thumbnails...
+Status: ✅ Processing completed successfully!
+Status: ❌ Error occurred: ...
+Status: ⏸️ Processing paused (Ctrl+C)
+```
+
+**Progress Bar:**
+
+- Tiến trình hiện tại (0-100%)
+- Thời gian đã dùng
+- Thời gian còn lại (ước tính)
+
+**Log Output:**
+
+- Hiển thị thông báo chi tiết
+- Cuộn tự động theo thông báo mới
+- Các màu sắc khác nhau:
+  - 🟢 Xanh lá: Thành công (✓)
+  - 🔴 Đỏ: Lỗi (❌)
+  - 🟡 Vàng: Cảnh báo (⚠️)
+  - 🔵 Xanh dương: Thông tin (ℹ️)
+
+### Ví dụ quy trình GUI
+
+**Bước 1: Chọn mode**
+
+```
+Mode: ● Direct
+```
+
+**Bước 2: Nhập URL**
+
+```
+Input: https://example.com/stream.m3u8
+```
+
+**Bước 3: Chọn thư mục output**
+
+```
+Output Directory: E:\MyVideos
+```
+
+**Bước 4: Nhập tên thư mục nhóm**
+
+```
+Group Folder: lesson_1
+```
+
+**Bước 5: Chọn file cần lưu**
+
+```
+✓ Save Video
+✓ Save Audio
+✓ Save VTT
+✓ Create Thumbnails
+```
+
+**Bước 6: Cấu hình thumbnails**
+
+```
+Interval: 5 seconds
+Size: 160 x 90 pixels
+Cols: 10
+Format: WebP
+CDN URL: [để trống]
+```
+
+**Bước 7: Chọn ngôn ngữ**
+
+```
+Language: Tiếng Việt
+Model: small
+GPU: Auto
+```
+
+**Bước 8: Click Start**
+
+```
+Status: GPU detected - NVIDIA RTX 3060
+🔄 Downloading video... (23%)
+✓ Downloaded 1.2GB
+🎵 Extracting audio...
+✓ Audio extracted: 250MB
+🎤 Transcribing (model: small)...
+✓ Transcription completed
+🎨 Creating sprite sheet...
+✓ Sprite sheet created (120 frames)
+
+✅ Processing completed!
+Output: E:\MyVideos\lesson_1\
+```
+
+---
+
+---
+
+## 💻 Cách 3: Sử dụng Command Line Interface (CLI)
+
+CLI cho phép tự động hóa và chạy script mà không cần interactive menu.
+
+### Cú pháp cơ bản
+
+```powershell
+python .\main_cli.py [options]
+```
+
+hoặc từ Python trực tiếp:
+
+```powershell
+python .\main.py --m3u8 "URL" --output-dir "PATH" [more options]
+```
+
+### Các tuỳ chọn CLI chi tiết
+
+#### **Chế độ xử lý**
+
+| Flag     | Mô tả                  | Giá trị               | Ví dụ                                      |
+| -------- | ---------------------- | --------------------- | ------------------------------------------ |
+| `--mode` | Chế độ xử lý           | `direct` hoặc `batch` | `--mode direct`                            |
+| `--m3u8` | URL m3u8 (Direct Mode) | URL hoặc file         | `--m3u8 "https://example.com/stream.m3u8"` |
+| `--json` | File JSON (Batch Mode) | File path             | `--json "input.json"`                      |
+
+**Ví dụ Direct Mode:**
+
+```powershell
+python .\main.py --m3u8 "https://example.com/stream.m3u8"
+```
+
+**Ví dụ Batch Mode:**
+
+```powershell
+python .\main.py --mode batch --json "input.json"
+```
+
+#### **Cấu hình đầu ra**
+
+| Flag              | Mô tả                   | Giá trị           | Ví dụ                      |
+| ----------------- | ----------------------- | ----------------- | -------------------------- |
+| `--output-dir`    | Thư mục lưu trữ         | Đường dẫn thư mục | `--output-dir "E:\Videos"` |
+| `--group-name`    | Tên thư mục nhóm        | Tên thư mục       | `--group-name "lesson_1"`  |
+| `--output-prefix` | Tiền tố tên file output | Tên               | `--output-prefix "movie"`  |
+
+**Ví dụ:**
+
+```powershell
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --output-dir "E:\MyVideos" `
+  --group-name "bai_1"
+```
+
+**Kết quả**: `E:\MyVideos\bai_1\`
+
+#### **Chọn file cần lưu**
+
+| Flag           | Mô tả           | Giá trị                 |
+| -------------- | --------------- | ----------------------- |
+| `--save-video` | Lưu file video  | (flag, không cần value) |
+| `--save-audio` | Lưu file audio  | (flag, không cần value) |
+| `--save-vtt`   | Lưu file phụ đề | (flag, không cần value) |
+
+**Ví dụ:**
+
+```powershell
+# Lưu tất cả
+python .\main.py --m3u8 "..." --save-video --save-audio --save-vtt
+
+# Chỉ lưu phụ đề
+python .\main.py --m3u8 "..." --save-vtt
+
+# Chỉ lưu video + audio
+python .\main.py --m3u8 "..." --save-video --save-audio
+```
+
+**Ghi chú**: Nếu không chỉ định flag `--save-*`, script sẽ hỏi qua interactive menu.
+
+#### **Ngôn ngữ và Mô hình**
+
+| Flag         | Mô tả              | Giá trị                      | Ví dụ             |
+| ------------ | ------------------ | ---------------------------- | ----------------- |
+| `--language` | Ngôn ngữ nhận dạng | Mã ISO 639-1                 | `--language "vi"` |
+| `--model`    | Mô hình Whisper    | tiny/base/small/medium/large | `--model "small"` |
+| `--no-gpu`   | Bắt buộc dùng CPU  | (flag)                       | `--no-gpu`        |
+
+**Mã ngôn ngữ phổ biến:**
+
+- `vi` - Tiếng Việt ⭐
+- `en` - Tiếng Anh
+- `ja` - Tiếng Nhật
+- `ko` - Tiếng Hàn
+- `zh` - Tiếng Trung
+- `th` - Tiếng Thái
+- `id` - Tiếng Indonesia
+
+**Mô hình Whisper (mặc định: small):**
+
+- `tiny` - ~39MB, nhanh nhất, chất lượng thấp
+- `base` - ~140MB, nhanh, chất lượng trung bình
+- `small` - ~466MB, cân bằng ⭐ (khuyến nghị)
+- `medium` - ~1.5GB, chậm, chất lượng tốt
+- `large` - ~2.9GB, chậm nhất, chất lượng tốt nhất
+
+**Ví dụ:**
+
+```powershell
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --language "vi" `
+  --model "small"
+
+# Dùng CPU (không GPU)
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --language "en" `
+  --no-gpu
+```
+
+#### **Cấu hình Sprite Sheet Thumbnails**
+
+| Flag                   | Mô tả              | Giá trị       | Mặc định    |
+| ---------------------- | ------------------ | ------------- | ----------- |
+| `--create-thumbnails`  | Tạo sprite sheet   | (flag)        | Không tạo   |
+| `--thumbnail-interval` | Khoảng cách (giây) | Số            | 5           |
+| `--thumb-width`        | Chiều rộng (px)    | Số            | 160         |
+| `--thumb-height`       | Chiều cao (px)     | Số            | 90          |
+| `--thumb-cols`         | Số cột             | Số            | 10          |
+| `--thumb-format`       | Định dạng ảnh      | webp hoặc jpg | webp        |
+| `--cdn-url`            | URL CDN            | URL           | (tương đối) |
+
+**Ví dụ 1: Sprite sheet mặc định**
+
+```powershell
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --create-thumbnails
+```
+
+**Ví dụ 2: Sprite sheet tùy chỉnh**
+
+```powershell
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --create-thumbnails `
+  --thumbnail-interval 3 `
+  --thumb-width 120 `
+  --thumb-height 68 `
+  --thumb-cols 12 `
+  --thumb-format "jpg"
+```
+
+**Ví dụ 3: Với URL CDN**
+
+```powershell
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --create-thumbnails `
+  --thumb-format "webp" `
+  --cdn-url "https://cdn.example.com/videos/sprite.webp"
+```
+
+### Ví dụ CLI chi tiết
+
+#### **Ví dụ 1: Direct Mode - Lưu đầy đủ**
+
+```powershell
+python .\main.py `
+  --mode direct `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --output-dir "E:\MyVideos" `
+  --group-name "tutorial_01" `
+  --language "vi" `
+  --model "small" `
+  --save-video `
+  --save-audio `
+  --save-vtt
+```
+
+**Kết quả:**
+
+```
+E:\MyVideos\tutorial_01\
+├── video.mp4
+├── audio.wav
+└── movie_vi.vtt
+```
+
+#### **Ví dụ 2: Direct Mode - Chỉ phụ đề**
+
+```powershell
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --output-dir "E:\Subtitles" `
+  --save-vtt `
+  --language "vi"
+```
+
+**Kết quả:**
+
+```
+E:\Subtitles\
+└── movie_vi.vtt
+```
+
+#### **Ví dụ 3: Direct Mode - Video + Sprite Sheet**
+
+```powershell
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --output-dir "E:\VideoPlayer" `
+  --group-name "video_1" `
+  --save-video `
+  --save-vtt `
+  --create-thumbnails `
+  --thumbnail-interval 5 `
+  --thumb-format "webp"
+```
+
+**Kết quả:**
+
+```
+E:\VideoPlayer\video_1\
+├── video.mp4
+├── movie_vi.vtt
+├── thumbnails.vtt
+└── thumbnails/
+    └── sprite.webp
+```
+
+#### **Ví dụ 4: Batch Mode**
+
+File `input.json`:
+
+```json
+{
+  "root_path": "E:\\Videos\\Series",
+  "items": [
+    {
+      "slug": "ep-01",
+      "m3u8_url": "https://example.com/ep1.m3u8",
+      "folder_name": "episode_01"
+    },
+    {
+      "slug": "ep-02",
+      "m3u8_url": "https://example.com/ep2.m3u8",
+      "folder_name": "episode_02"
+    }
+  ]
+}
+```
+
+**Chạy batch:**
+
+```powershell
+python .\main.py `
+  --mode batch `
+  --json "input.json" `
+  --language "vi" `
+  --model "small" `
+  --save-video `
+  --save-vtt
+```
+
+**Kết quả:**
+
+```
+E:\Videos\Series\
+├── ep-01\
+│   └── episode_01\
+│       ├── video.mp4
+│       └── movie_vi.vtt
+└── ep-02\
+    └── episode_02\
+        ├── video.mp4
+        └── movie_vi.vtt
+```
+
+#### **Ví dụ 5: Tối ưu cho tốc độ (GPU + Model nhỏ)**
+
+```powershell
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --output-dir "E:\Fast" `
+  --model "tiny" `
+  --language "vi" `
+  --save-vtt
+```
+
+**Ưu điểm:** Xử lý nhanh hơn ~5x so với large model
+
+#### **Ví dụ 6: Tối ưu cho chất lượng**
+
+```powershell
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --output-dir "E:\HighQuality" `
+  --model "large" `
+  --language "vi" `
+  --save-vtt
+```
+
+**Ưu điểm:** Độ chính xác cao nhất, phù hợp tài liệu quan trọng
+
+#### **Ví dụ 7: Lưu tất cả + Sprite sheet CDN**
+
+```powershell
+python .\main.py `
+  --m3u8 "https://example.com/stream.m3u8" `
+  --output-dir "E:\Complete" `
+  --group-name "full_video" `
+  --save-video `
+  --save-audio `
+  --save-vtt `
+  --create-thumbnails `
+  --thumbnail-interval 3 `
+  --thumb-cols 8 `
+  --thumb-format "webp" `
+  --cdn-url "https://cdn.example.com/videos/full_video/sprite.webp" `
+  --language "vi" `
+  --model "medium"
+```
+
+**Kết quả:** File đầy đủ + sprite sheet tối ưu cho web
+
+### Batch processing từ script
+
+Tạo file `process.bat` để xử lý nhiều URL:
+
+```batch
+@echo off
+REM Process multiple videos
+python .\main.py --m3u8 "https://example.com/video1.m3u8" --group-name "video_1" --language "vi" --save-vtt
+python .\main.py --m3u8 "https://example.com/video2.m3u8" --group-name "video_2" --language "vi" --save-vtt
+python .\main.py --m3u8 "https://example.com/video3.m3u8" --group-name "video_3" --language "vi" --save-vtt
+```
+
+**Chạy:**
+
+```powershell
+.\process.bat
+```
 
 ---
 
@@ -289,6 +1119,30 @@ Chọn định dạng ảnh:
 Chọn (1-2, mặc định 1): 1
 URL CDN cho sprite sheet (Nhấn Enter để bỏ qua):
 ```
+
+| Tuỳ chọn               | Mô tả                              | Ví dụ                                                        |
+| ---------------------- | ---------------------------------- | ------------------------------------------------------------ |
+| `--mode`               | Chế độ xử lý                       | `--mode "direct"` hoặc `--mode "batch"`                      |
+| `--json`               | Đường dẫn file JSON (batch mode)   | `--json "input.json"`                                        |
+| `--m3u8`               | URL m3u8 hoặc đường dẫn file       | `--m3u8 "https://example.com/video.m3u8"`                    |
+| `--output-dir`         | Thư mục lưu trữ                    | `--output-dir "E:\Videos"`                                   |
+| `--group-name`         | Tên thư mục nhóm file (tuỳ chọn)   | `--group-name "bai_hoc_1"`                                   |
+| `--language`           | Mã ngôn ngữ (ISO 639-1)            | `--language "vi"` (Việt), `--language "en"` (Anh)            |
+| `--model`              | Mô hình Whisper                    | `--model "tiny"`, `"base"`, `"small"`, `"medium"`, `"large"` |
+| `--output-prefix`      | Tiền tố tên file                   | `--output-prefix "movie"` → `movie_vi.vtt`                   |
+| `--save-video`         | Lưu file video                     | Không có value, chỉ cần thêm flag                            |
+| `--save-audio`         | Lưu file audio (WAV)               | Không có value, chỉ cần thêm flag                            |
+| `--save-vtt`           | Lưu file phụ đề (VTT)              | Không có value, chỉ cần thêm flag                            |
+| `--create-thumbnails`  | Tạo sprite sheet thumbnails        | Không có value, chỉ cần thêm flag                            |
+| `--thumbnail-interval` | Khoảng cách giữa thumbnails (giây) | `--thumbnail-interval 5` (mặc định: 5)                       |
+| `--thumb-width`        | Chiều rộng mỗi thumbnail (px)      | `--thumb-width 160` (mặc định: 160)                          |
+| `--thumb-height`       | Chiều cao mỗi thumbnail (px)       | `--thumb-height 90` (mặc định: 90)                           |
+| `--thumb-cols`         | Số cột trong sprite sheet          | `--thumb-cols 10` (mặc định: 10)                             |
+| `--thumb-format`       | Định dạng ảnh sprite sheet         | `--thumb-format "webp"` hoặc `"jpg"` (mặc định: webp)        |
+| `--cdn-url`            | URL CDN cho sprite sheet           | `--cdn-url "https://cdn.example.com/sprite.webp"`            |
+| `--no-gpu`             | Bắt buộc dùng CPU thay vì GPU      | Không có value, chỉ cần thêm flag                            |
+
+**Ghi chú**: Nếu bạn cung cấp các flag `--save-*`, script sẽ **chỉ lưu những file bạn chỉ định**. Nếu không cung cấp, script sẽ hỏi qua menu.
 
 #### Qua CLI
 
@@ -776,11 +1630,43 @@ Dự án này sử dụng:
 
 ---
 
-**Lần cập nhật cuối**: 05 tháng 12 năm 2025 (v1.2.0)
+**Lần cập nhật cuối**: 29 tháng 4 năm 2026 (v1.3.0)
 
 ---
 
 ## Changelog
+
+### v1.3.0 (29/04/2026)
+
+- **[Documentation]** Cập nhật hướng dẫn sử dụng chi tiết cho tất cả 3 cách sử dụng:
+  - **Menu Tương tác (Interactive Mode)**:
+    - Chi tiết từng bước nhập dữ liệu
+    - Giải thích chi tiết 8 tùy chọn lưu file
+    - Quy trình cấu hình Sprite Sheet Thumbnails
+    - Hướng dẫn chọn ngôn ngữ và mô hình
+    - Ví dụ gợi ý dùng lặp lại
+  - **Giao diện GUI (main_gui.py)**:
+    - Trình bày chi tiết các phần UI
+    - Hướng dẫn 7 bước sử dụng GUI
+    - Screenshot ASCII art của giao diện
+    - Giải thích từng control button
+    - Status và Log output chi tiết
+    - Ví dụ quy trình GUI đầy đủ
+  - **Command Line Interface (CLI)**:
+    - Bảng tham khảo flags cấu trúc theo chức năng
+    - Giải thích chi tiết mỗi parameter
+    - 7 ví dụ CLI thực tế:
+      - Direct Mode lưu đầy đủ
+      - Direct Mode chỉ phụ đề
+      - Direct Mode với sprite sheet
+      - Batch Mode xử lý
+      - Tối ưu tốc độ
+      - Tối ưu chất lượng
+      - Lưu tất cả + sprite sheet CDN
+    - Ví dụ batch processing từ .bat script
+- **[Improvement]** Cấu trúc Mục lục mới phản ánh 3 cách sử dụng chính
+- **[Content]** Thêm bảng tham khảo ngôn ngữ và mô hình Whisper với thông số
+- **[Content]** Thêm ví dụ output structure chi tiết cho mỗi scenario
 
 ### v1.2.0 (05/12/2025)
 
